@@ -137,17 +137,60 @@ def test_align_repad_leaves_uniform_border():
     assert len(margins) == 1, margins  # uniform padding, nothing rotated
 
 def test_process_image_logs_steps_with_thresholds():
-    lines = []
+    entries = []
     data = _img("photo_dark_bg", seed=3)
     jpeg, m, _ = process_image(data, slot_label="CITI FRONT", slot_group="Docs",
                                ocr_mode="OFF",
-                               log_cb=lambda stage, line: lines.append((stage, line)))
+                               log_cb=lambda stage, entry: entries.append(entry))
     assert len(jpeg) > 1000
-    # log_cb got one line per step, steps persisted in metrics
-    assert len(lines) >= 7, lines
-    assert len(m["steps"]) == len(lines)
-    blob = "\n".join(m["steps"])
-    assert "CITI FRONT" in blob
-    for needle in ("30–98%", "0.3°", "15°"):  # thresholds are stated
+    # log_cb got one structured entry per step, steps persisted in metrics
+    assert len(entries) >= 7, entries
+    assert len(m["steps"]) == len(entries)
+    assert all({"slot", "stage", "msg", "ms"} <= set(e) for e in entries)
+    assert all(e["slot"] == "CITI FRONT" for e in entries)
+    stages = [e["stage"] for e in entries]
+    for s in ("load", "detect", "crop_deskew", "orientation", "align", "enhance", "compose"):
+        assert s in stages, stages
+    timed = [e for e in entries if e["stage"] not in ("start",)]
+    assert all(isinstance(e["ms"], (int, float)) and e["ms"] >= 0 for e in timed)
+    blob = "\n".join(e["msg"] for e in entries)
+    for needle in ("30–98%", "0.3°"):  # thresholds are stated
         assert needle in blob, blob
-    assert "tilt" in blob and "crop" in blob.lower()
+    assert "dark background" in blob  # bg type stated for bg photos
+    # a tilted full-bleed shot exercises the deskew branch incl. its 15° limit
+    tdata = _img("clean_scan")
+    timg, _ = stage_load(tdata)
+    tilted = timg.rotate(-7, expand=True, fillcolor=(255, 255, 255))
+    buf = io.BytesIO(); tilted.save(buf, "JPEG", quality=85)
+    _, tm, _ = process_image(buf.getvalue(), slot_label="TILT", ocr_mode="OFF")
+    tblob = "\n".join(e["msg"] for e in tm["steps"])
+    assert "15°" in tblob and tm["aligned"] is True, tblob
+
+def test_detect_extracts_document_from_dark_bg():
+    """Spec 5.2: photo of a page on a dark surface -> quad in 30-98%, warp path."""
+    from pipeline.crop import stage_crop_deskew
+    for sc in ("photo_dark_bg", "photo_wood_like_bg"):
+        data = _img(sc, seed=3)
+        img, _ = stage_load(data)
+        info, dm = stage_detect(img)
+        assert 0.30 <= dm["area_ratio"] <= 0.98, (sc, dm)
+        assert dm["second_ratio"] <= 0.40, (sc, dm)
+        assert dm["bg_dark"] is True, (sc, dm)
+        out, cm = stage_crop_deskew(img, info, dm)
+        assert cm["warp"] in ("poly_warp", "rect_warp") and cm["fallback"] == "", (sc, cm)
+        # only the document kept: photo 1700x2100 -> doc-sized portrait output
+        assert out.size[1] > out.size[0] and out.size[0] < 1700, (sc, out.size)
+
+def test_detect_white_on_white_trims_only():
+    data = _img("white_on_white")
+    img, _ = stage_load(data)
+    info, dm = stage_detect(img)
+    assert dm["area_ratio"] > 0.98, dm  # edge not found -> trim only
+    assert dm["bg_dark"] is False, dm
+
+def test_upload_rejects_two_objects():
+    from core.validation import validate_upload
+    data, _ = generate("two_objects", seed=1)
+    ok, err, measured, logs = validate_upload(data, "two.jpg")
+    assert not ok and "page sanity" in err, (ok, err)
+    assert measured.get("second_ratio", 0) > 0.40, measured

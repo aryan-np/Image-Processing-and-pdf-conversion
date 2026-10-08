@@ -15,8 +15,11 @@
 <tr><th>resources</th><td>RSS Δ {{ img.rss_delta }}B · alloc peak {{ img.alloc_peak }}B · thread {{ img.thread_id }}</td></tr>
 <tr><th>warnings</th><td>{{ img.warnings|default:"—" }} {{ img.exception }}</td></tr>
 </tbody></table></div></div>
-<div class="card"><h3>📋 Steps taken</h3>{% for s in img.steps %}
-<div class="row" style="padding:2px 0"><span class="muted" style="font-size:12px">{{ s }}</span></div>{% empty %}<p class="muted">no step log recorded for this image (processed before logging was added — re-run to see each step with its threshold).</p>{% endfor %}</div>
+<div class="card"><h3>📋 Steps taken</h3>
+<div class="tablewrap"><table><thead><tr><th>step</th><th>detail</th><th style="text-align:right">time</th></tr></thead><tbody>
+{% for s in img.steps %}{% if s.stage %}<tr><td><span class="badge info">{{ s.stage }}</span></td><td>{{ s.msg }}</td><td style="text-align:right;white-space:nowrap">{% if s.ms %}{{ s.ms }}ms{% else %}—{% endif %}</td></tr>
+{% else %}<tr><td colspan="3" class="muted">{{ s }}</td></tr>{% endif %}{% empty %}<tr><td colspan="3" class="muted">no step log recorded for this image (re-run to see each step with its time).</td></tr>{% endfor %}
+</tbody></table></div></div>
 <div class="card"><h3>🔤 OCR logs ({{ ocrs|length }})</h3>{% for o in ocrs %}
 <div class="row"><span class="badge">{{ o.reason }}</span><span class="muted">rotate {{ o.osd_rotate }} · conf {{ o.osd_confidence }} · words {{ o.word_count }} · mean {{ o.mean_conf }}</span>
 <a class="btn ghost sm" href="/ocr/{{ o.id }}/">detail</a></div><pre class="log">{{ o.full_text|truncatechars:800 }}</pre>{% empty %}<p class="muted">no OCR for this image (mode OFF, tesseract missing, or FALLBACK gated off / not ambiguous).</p>{% endfor %}</div>

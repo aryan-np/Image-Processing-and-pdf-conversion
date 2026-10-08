@@ -19,7 +19,16 @@
 <div id="result"></div>
 <div class="row" style="margin-top:10px"><span class="muted" id="progTxt">idle</span>
 <div class="pbar" style="flex:1"><i id="progBar"></i></div></div>
-<pre id="plog" class="log" style="display:none"></pre></div>
+<div id="plog"></div></div>
+<style>
+#plog{background:#0f1728;border-radius:10px;padding:10px 12px;max-height:260px;overflow:auto;margin:8px 0 0;display:none}
+.pl-slot{color:#fff;font-weight:700;font-size:12.5px;margin:8px 0 4px}
+.pl-slot:first-child{margin-top:0}
+.pl-row{display:flex;gap:8px;align-items:baseline;padding:2px 0}
+.pl-row .badge{font-size:10.5px;padding:1px 8px;flex:none}
+.pl-msg{color:#cfe3ff;font-size:12px;flex:1}
+.pl-ms{color:#8ea3c7;font-size:11.5px;flex:none;font-variant-numeric:tabular-nums}
+</style>
 
 <div class="card"><h3>3 · Fill with test images</h3>
 <div class="row" style="margin-bottom:8px">
@@ -118,9 +127,22 @@ function renderRuns(d){document.getElementById('runs').innerHTML=d.runs.map(r=>
 <span class="muted">total ${fmtT(r.total_ms)} · images ${fmtT(r.images_ms)} · single ~${r.images[0]?fmtT((r.images_ms||0)/r.images[0]):'—'} · pdf ${r.pdf_ms?fmtT(r.pdf_ms):'—'}</span></div>`).join('')||'no runs yet'}
 function startPoll(){stopPoll();POLLT=setInterval(pollTick,1000)}
 function stopPoll(){if(POLLT){clearInterval(POLLT);POLLT=null}}
-function paintLog(p){const el=document.getElementById('plog');const tail=(p&&p.tail)||[];
-if(!tail.length){el.style.display='none';return}
-el.style.display='block';el.textContent=tail.slice(-120).join('\n');el.scrollTop=el.scrollHeight}
+function stageCls(s){return {__done__:'ok',__failed__:'err',align:'warn',start:'dark'}[s]||'info'}
+function prettyStage(s){return {start:'start',load:'load',detect:'detect',crop_deskew:'crop',orientation:'orient',align:'align',enhance:'enhance',compose:'compose',__done__:'done',__failed__:'failed'}[s]||s}
+function paintLog(p){const host=document.getElementById('plog');const tail=((p&&p.tail)||[]).slice(-80);
+if(!tail.length){host.style.display='none';host.innerHTML='';return}
+host.style.display='block';host.innerHTML='';
+let cur=null,box=null;
+for(const e of tail){
+if(typeof e==='string'){const d=document.createElement('div');d.className='pl-row';
+const m=document.createElement('span');m.className='pl-msg';m.textContent=e;d.appendChild(m);host.appendChild(d);cur=null;continue}
+if(cur!==e.slot){cur=e.slot;const h=document.createElement('div');h.className='pl-slot';h.textContent='▸ '+cur;host.appendChild(h);box=document.createElement('div');host.appendChild(box)}
+const row=document.createElement('div');row.className='pl-row';
+const b=document.createElement('span');b.className='badge '+stageCls(e.stage);b.textContent=prettyStage(e.stage);
+const m=document.createElement('span');m.className='pl-msg';m.textContent=e.msg;
+const t=document.createElement('span');t.className='pl-ms';t.textContent=(e.ms==null?'':Math.round(e.ms)+'ms');
+row.append(b,m,t);box.appendChild(row)}
+host.scrollTop=host.scrollHeight}
 async function pollTick(){const r=await api('/api/sessions/'+SID+'/');if(!r.ok)return;const d=r.data;
 if(d.runs.length){const rid=d.runs[0].id;const g=await api('/api/runs/'+rid+'/');
 if(g.ok&&g.data.progress&&g.data.progress.total){const p=g.data.progress;

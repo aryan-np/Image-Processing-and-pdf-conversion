@@ -13,6 +13,8 @@ can be varied; every processed image is logged (DB rows + `logs/pipeline.jsonl`)
   - EXIF transpose, page-quad perspective warp (keystone fix), 0/90/180/270° orientation (aspect heuristic + optional Tesseract OSD),
   - fine **skew alignment** (tilt ≥ 0.3° is deskewed, never above 15°; border re-squared + uniform 2% padding so nothing stays rotated),
   - CLAHE contrast enhance, print-size JPEG compose.
+- **Document-only crop** — photos on dark/light surfaces get the background warped out (4-corner perspective warp on high-confidence quads,
+  page area 30–98% of frame; white-on-white / full-bleed falls back to whitespace trim; a 2nd contour above ~40% rejects the upload as "two objects").
 - **Live processing log** — while a run is `PROCESSING` the session page streams human-readable lines per image
   (`[CITI FRONT] align: tilt 6.9° found → rotating to fix…`), each stating the threshold/decision; the same steps are saved per image and shown on its detail page.
 - **OCR modes** — `OFF` (never) · `FALLBACK` (OSD only when orientation is ambiguous) · `ALWAYS` (OSD + full text). Works with tesseract missing (graceful `OFF`).

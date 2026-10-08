@@ -40,10 +40,10 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
     ocr_fallback_enabled mirrors the OCR_FALLBACK_ENABLED env toggle: when False,
     FALLBACK mode never invokes OCR (zero ocr_events, heuristic orientation only).
 
-    log_cb(stage, line): optional callback receiving a human-readable log line
-    for every step (also collected in metrics["steps"]). The caller (e.g. the
-    web UI) uses it for a live "processing CITI FRONT — align: tilt 6.9° found,
-    deskewing…" feed. Never breaks the pipeline if it raises.
+    log_cb(stage, entry): optional callback receiving a structured step entry
+    {"slot", "stage", "msg", "ms"} for every step (also collected in
+    metrics["steps"]). The web UI renders these as a pretty per-photo,
+    per-step log with millisecond timings. Never breaks the pipeline if it raises.
     """
     tracemalloc.start()
     rss0 = _rss()
@@ -53,12 +53,13 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
     cpu0 = time.process_time()
     tag = slot_label or f"#{slot_order}"
 
-    def say(stage, msg):
-        line = f"[{tag}] {msg}"
-        steps.append(line)
+    def emit(stage, msg, ms=None):
+        entry = {"slot": tag, "stage": stage, "msg": msg,
+                 "ms": None if ms is None else round(float(ms), 1)}
+        steps.append(entry)
         try:
             if log_cb is not None:
-                log_cb(stage, line)
+                log_cb(stage, entry)
         except Exception:
             pass
 
@@ -79,27 +80,34 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
             raise
 
     try:
-        say("start", f"processing {tag} ({slot_group or 'no group'}) — "
+        emit("start", f"Processing {tag} ({slot_group or 'no group'}) · "
                       f"{len(data) / 1024:.0f}KB {original_filename or 'upload'}")
         img, lm = timed("load", stage_load, data)
         m.update(lm)
-        say("load", f"load: {lm.get('orig_w')}×{lm.get('orig_h')} {lm.get('format') or '?'} "
-                     f"({lm.get('megapixels')}MP), EXIF orientation {lm.get('exif_orientation')} "
-                     f"→ transposed upright")
+        emit("load", f"Loaded {lm.get('orig_w')}×{lm.get('orig_h')} {lm.get('format') or '?'} "
+                     f"({lm.get('megapixels')}MP) · EXIF orientation {lm.get('exif_orientation')} "
+                     f"→ transposed upright", stage_ms["load"])
         dinfo, dm = timed("detect", stage_detect, img)
         m.update({"area_ratio": dm["area_ratio"], "detected_angle": dm["angle"],
                   "second_ratio": dm["second_ratio"], "quad_confidence": dm["quad_confidence"]})
-        say("detect", f"detect: page covers {dm['area_ratio'] * 100:.1f}% of the photo "
-                       f"(needs 30–98% for a perspective warp), contour angle {dm['angle']}°, "
-                       f"quad confidence {dm['quad_confidence']}")
+        bg = "dark background" if dm.get("bg_dark") else "light background"
+        emit("detect", f"Detecting page on {bg} · covers {dm['area_ratio'] * 100:.1f}% of the photo "
+                       f"(warp needs 30–98%, else trim only) · angle {dm['angle']}° · "
+                       f"quad confidence {dm['quad_confidence']} · 2nd contour {dm['second_ratio']}",
+             stage_ms["detect"])
         cropped, cm = timed("crop_deskew", stage_crop_deskew, img, dinfo, dm)
         m["fallback"] = cm.get("fallback", "")
-        if not m["fallback"]:
-            say("crop", "crop: clean page quad found → perspective warp applied "
-                         "(keystone fixed, page straightened)")
+        m["warp"] = cm.get("warp", "")
+        if cm.get("warp") == "poly_warp":
+            emit("crop_deskew", f"Cropping page: 4-corner perspective warp + 2% padding · "
+                         f"background removed, only the document kept", stage_ms["crop_deskew"])
+        elif cm.get("warp") == "rect_warp":
+            emit("crop_deskew", f"Cropping page: bounding-box warp + 2% padding · "
+                         f"background removed, only the document kept", stage_ms["crop_deskew"])
         else:
-            say("crop", f"crop: no clean page quad (area {dm['area_ratio'] * 100:.1f}% outside 30–98%) → "
-                         f"{m['fallback']} fallback: trimming white margins instead of warping")
+            emit("crop_deskew", f"No clean page edge (area {dm['area_ratio'] * 100:.1f}% outside 30–98%) → "
+                         f"{m['fallback']}: trimming white margins instead of warping",
+                 stage_ms["crop_deskew"])
 
         # OCR callback wiring
         def ocr_fn(im):
@@ -141,35 +149,38 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
         m.update({"orientation_method": om["method"], "rotation": om["rotation"],
                   "osd_confidence": om.get("osd_confidence")})
         if om.get("osd_confidence") is not None and om["method"].startswith("osd"):
-            say("orientation", f"OCR OSD read the text (confidence {om['osd_confidence']}) → "
-                               f"rotated {om['rotation']}° (method {om['method']}, mode {ocr_mode})")
+            emit("orientation", f"OCR text read (confidence {om['osd_confidence']}) → "
+                                f"rotated {om['rotation']}° (method {om['method']}, mode {ocr_mode})",
+                 stage_ms["orientation"])
         elif om["rotation"]:
-            say("orientation", f"aspect expects {expected_orientation} → "
-                               f"rotated {om['rotation']}° (method {om['method']}, no OCR needed)")
+            emit("orientation", f"Aspect expects {expected_orientation} → "
+                                f"rotated {om['rotation']}° (method {om['method']}, no OCR needed)",
+                 stage_ms["orientation"])
         else:
-            say("orientation", f"already upright (method {om['method']}, mode {ocr_mode}) — "
-                               f"no rotation")
+            emit("orientation", f"Already upright (method {om['method']}, mode {ocr_mode}) · no rotation",
+                 stage_ms["orientation"])
         aligned, am = timed("align", stage_align, oriented)
         m.update({"skew_angle": am["skew_angle"], "deskew_deg": am["corrected_deg"],
                   "aligned": am["aligned"], "align_method": am["method"],
                   "repad": am.get("repad", False)})
         if am["aligned"]:
-            say("align", f"align: tilt {am['skew_angle']}° found (≥ 0.3° threshold, limit 15°, "
-                         f"{am['n_lines']} text lines via {am['method']}) → rotating "
-                         f"{am['corrected_deg']}° to fix, then re-squaring border + uniform "
-                         f"2% padding so nothing stays rotated")
+            emit("align", f"Tilt {am['skew_angle']}° found (≥ 0.3° threshold, limit 15°, "
+                          f"{am['n_lines']} text lines via {am['method']}) → rotated "
+                          f"{am['corrected_deg']}° to fix, then re-squared border + uniform "
+                          f"2% padding", stage_ms["align"])
         else:
-            say("align", f"align: level (tilt {am['skew_angle']}°, below 0.3° threshold) — "
-                         f"skipping ({am['method']})")
+            emit("align", f"Level (tilt {am['skew_angle']}°, below 0.3° threshold) · "
+                          f"skipping ({am['method']})", stage_ms["align"])
         enhanced, em = timed("enhance", stage_enhance, aligned, enhance_enabled)
         if enhance_enabled:
-            say("enhance", "enhance: contrast boost (CLAHE) applied")
+            emit("enhance", "Contrast boost (CLAHE, no binarisation — stamps kept)",
+                 stage_ms["enhance"])
         else:
-            say("enhance", "enhance: contrast boost OFF by settings — skipping")
+            emit("enhance", "Contrast boost OFF by settings · skipping", stage_ms["enhance"])
         jpeg, jm = timed("compose", stage_compose, enhanced)
         m.update({"out_w": jm["out_w"], "out_h": jm["out_h"], "jpeg_bytes": jm["jpeg_bytes"]})
-        say("compose", f"compose: print image {jm['out_w']}×{jm['out_h']} JPEG {jm['jpeg_bytes'] / 1024:.0f}KB "
-                        f"ready for the A4 page")
+        emit("compose", f"Print image {jm['out_w']}×{jm['out_h']} JPEG {jm['jpeg_bytes'] / 1024:.0f}KB "
+                        f"ready for the A4 page", stage_ms["compose"])
         if m.get("fallback") not in ("", "no_crop"):
             warnings.append(f"fallback:{m['fallback']}")
             status = "WARN"
@@ -182,8 +193,8 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
         total = _now_ms(t_all)
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
-        say("__done__", f"done {tag} in {total:.0f}ms — {status} "
-                         f"{('[' + ', '.join(warnings) + ']') if warnings else '[clean]'}")
+        emit("__done__", f"Done {tag} in {total:.0f}ms · {status} "
+                         f"{('[' + ', '.join(warnings) + ']') if warnings else '[clean]'}", total)
         m.update({"total_ms": round(total, 2), "rss_delta": _rss() - rss0, "alloc_peak": peak,
                   "thread": str(threading.get_ident())[-6:], "status": status,
                   "stage_ms": stage_ms, "warnings": warnings, "exception": "",
@@ -201,7 +212,7 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
         total = _now_ms(t_all)
         try: tracemalloc.stop()
         except Exception: pass
-        say("__failed__", f"FAILED {tag} after {total:.0f}ms: {str(e)[:200]}")
+        emit("__failed__", f"FAILED {tag} after {total:.0f}ms: {str(e)[:200]}", total)
         m.update({"total_ms": round(total, 2), "rss_delta": _rss() - rss0, "alloc_peak": 0,
                   "thread": str(threading.get_ident())[-6:], "status": "FAILED",
                   "stage_ms": stage_ms, "warnings": warnings, "exception": str(e)[:1000],

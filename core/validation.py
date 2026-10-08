@@ -95,14 +95,12 @@ def validate_upload(data: bytes, filename: str):
     # 8 page sanity via detect
     t0 = time.perf_counter()
     try:
-        from pipeline.detect import stage_detect
+        from pipeline.detect import stage_detect, SECOND_REJECT
         info, dm = stage_detect(im.convert("RGB"))
         area, second = dm["area_ratio"], dm["second_ratio"]
-        ok = area >= 0.05 and second <= 0.9
-        # reject two equally-large objects
-        if second > 0.9 and area > 0.05:
-            ok = False
-        log("page_detect", f"area={area} second={second}", "area>=0.05, second<=0.9", ok, time.perf_counter() - t0)
+        # reject two equally-large objects (spec 5.2: 2nd contour above ~40%)
+        ok = area >= 0.05 and second <= SECOND_REJECT
+        log("page_detect", f"area={area} second={second}", f"area>=0.05, second<={SECOND_REJECT}", ok, time.perf_counter() - t0)
         if not ok: return False, f"page sanity failed (area={area}, second={second})", dm, logs
         measured = {"w": w, "h": h, "mp": mp, "blur": score, "mime": mime, "format": (im.format or "").lower()}
         measured.update(dm)
