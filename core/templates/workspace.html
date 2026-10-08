@@ -35,13 +35,15 @@
 <input type="number" min="0" max="100" value="0" data-sc="{{ sc.key }}" data-reject="{{ sc.rejects|yesno:'1,0' }}" oninput="mixTotal()" style="width:64px"></label>{% endfor %}</div>
 <div class="muted">Numbers = chance (%) of each image type. ⚠ types fail upload on purpose, to test validation.</div>
 <div class="row" style="margin-top:10px;align-items:flex-start">
-<img id="pvImg" alt="test image preview" style="max-width:280px;max-height:200px;border:1px solid var(--line);border-radius:8px;background:#f1f4f9;display:none">
+<a id="pvLink" href="#" target="_blank" title="Click to open full size" style="display:none">
+<img id="pvImg" alt="test image preview" style="max-width:280px;max-height:200px;border:1px solid var(--line);border-radius:8px;background:#f1f4f9;cursor:zoom-in"></a>
 <div><div class="row"><label class="f">Preview <select id="pvSc" onchange="updPreview()">
 <option value="__mix__">🎲 Mix (as configured)</option>
 {% for sc in scenarios %}<option value="{{ sc.key }}">{{ sc.label }}</option>{% endfor %}
-</select></label></div>
+</select></label>
+<button class="ghost sm" onclick="fillThis()" title="Fill empty slots with exactly this preview image">⬇ Fill with this</button></div>
 <div class="muted" id="pvCap">—</div>
-<div class="muted" style="font-size:12px">Live preview of the test image — tweak the % mix / seed and see it here before filling.</div></div></div></div>
+<div class="muted" style="font-size:12px">Live preview — click it for full size, tweak % mix / seed, or fill empty slots with exactly this image.</div></div></div></div>
 
 <div class="card"><h3>🗂 Slots</h3>
 <div class="row">
@@ -142,22 +144,27 @@ if(r.data.errors&&r.data.errors.length)toast('rejected: '+r.data.errors.slice(0,
 function mixParts(){const p=[];document.querySelectorAll('[data-sc]').forEach(i=>{const v=+i.value||0;if(v>0)p.push(i.dataset.sc+'='+v)});return p}
 function mixTotal(){const t=[...document.querySelectorAll('[data-sc]')].reduce((a,i)=>a+(+i.value||0),0);document.getElementById('mixTotal').textContent=t;
 const pv=document.getElementById('pvSc');if(pv&&pv.value==='__mix__')updPreview();return t}
+let PV_SC='clean_scan',PV_SEED=1;
 async function updPreview(){const pv=document.getElementById('pvSc');if(!pv)return;
 const sc=pv.value,seed=+document.getElementById('seed').value||1;
 const mix=mixParts().join(',')||'clean_scan=100';
-const cap=document.getElementById('pvCap'),img=document.getElementById('pvImg');
+const cap=document.getElementById('pvCap'),img=document.getElementById('pvImg'),lnk=document.getElementById('pvLink');
 try{const r=await fetch('/api/preview-synthetic/?scenario='+encodeURIComponent(sc)+'&seed='+seed+'&mix='+encodeURIComponent(mix)+'&title=PREVIEW');
-if(!r.ok){img.style.display='none';cap.textContent='no preview ('+(await r.json()).error+')';return}
+if(!r.ok){lnk.style.display='none';cap.textContent='no preview ('+(await r.json()).error+')';return}
 const b=await r.blob();if(img.src&&img.src.startsWith('blob:'))URL.revokeObjectURL(img.src);
-img.src=URL.createObjectURL(b);img.style.display='block';
-cap.textContent=(r.headers.get('X-Scenario')||sc)+' · seed '+seed+' · '+(b.size>1e6?(b.size/1e6).toFixed(1)+'MB':Math.round(b.size/1e3)+'KB');}catch(e){cap.textContent='preview failed'}}
+img.src=URL.createObjectURL(b);lnk.href=img.src;lnk.style.display='block';
+PV_SC=r.headers.get('X-Scenario')||sc;PV_SEED=seed;
+cap.textContent=PV_SC+' · seed '+seed+' · '+(b.size>1e6?(b.size/1e6).toFixed(1)+'MB':Math.round(b.size/1e3)+'KB');}catch(e){cap.textContent='preview failed'}}
 function mixPreset(name){const P={clean:{clean_scan:100},mixed:{clean_scan:60,photo_dark_bg:25,sideways_90:15},
 rotation:{sideways_90:40,upside_down_180:30,perspective:30},reject:{clean_scan:20,blurry:30,low_res:25,two_objects:15,corrupt_file:10}};
 const m=P[name]||{};document.querySelectorAll('[data-sc]').forEach(i=>{i.value=m[i.dataset.sc]||0});mixTotal()}
-async function fillSyn(){const parts=mixParts();if(!parts.length)return toast('set at least one image type above 0','err');
-const r=await api('/api/sessions/'+SID+'/fill-synthetic/','POST',{mix:parts.join(','),seed:+document.getElementById('seed').value});
+async function doFill(mix,seed){const r=await api('/api/sessions/'+SID+'/fill-synthetic/','POST',{mix:mix,seed:seed});
 if(!r.ok)toast(r.error,'err');else{toast(`filled ${r.data.filled}/${r.data.total}`,'ok');
 if(r.data.rejected.length)toast('rejected: '+r.data.rejected.slice(0,3).map(e=>e.slot+' ('+e.scenario+'): '+e.error).join(' | '),'err')}reload()}
+async function fillSyn(){const parts=mixParts();if(!parts.length)return toast('set at least one image type above 0','err');
+doFill(parts.join(','),+document.getElementById('seed').value)}
+async function fillThis(){if(!PV_SC)return toast('no preview yet','err');
+doFill(PV_SC+'=100',PV_SEED)}
 async function runProcess(){const r=await api('/api/sessions/'+SID+'/generate/','POST',{process_only:true});
 if(!r.ok){toast(r.error,'err');return}toast('processing images…','ok');reload()}
 async function runPdf(){const r=await api('/api/sessions/'+SID+'/create-pdf/','POST',{});

@@ -216,3 +216,10 @@ def test_preview_synthetic():
     assert len(r2.content) > 1000
     assert c.get("/api/preview-synthetic/", {"scenario": "nope"}).status_code == 400
     assert c.get("/api/preview-synthetic/", {"scenario": "corrupt_file"}).status_code == 422
+
+@pytest.mark.django_db
+def test_workspace_preview_ui():
+    """Preview is clickable (full-size link) and offers fill-with-this."""
+    s = Session.objects.create(name="W", ocr_mode="OFF")
+    html = Client().get(f"/s/{s.id}/").content.decode()
+    assert "pvLink" in html and "fillThis" in html and "Fill with this" in html
