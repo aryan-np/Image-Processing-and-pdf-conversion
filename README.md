@@ -19,6 +19,7 @@ can be varied; every processed image is logged (DB rows + `logs/pipeline.jsonl`)
   (`▸ CITI FRONT` → `detect`/`crop`/`align`… pills, each with its millisecond time), every line stating the threshold/decision,
   e.g. `Original tilt 6.9° (fix at ≥ 0.5°, limit 45°) → rotated 6.9° · processed tilt 0.0°`; the same steps are saved per image and shown on its detail page.
 - **OCR modes** — `OFF` (never) · `FALLBACK` (OSD only when orientation is ambiguous) · `ALWAYS` (OSD + full text). Works with tesseract missing (graceful `OFF`).
+  OSD runs on a 1200px copy with the `osd` model and fixes sideways-90 (→270°) and upside-down-180 photos in FALLBACK/ALWAYS at confidence ≥ 2.0.
 - **Three actions per session** — **Process Images** (timings only, no PDF), **Create PDF** (builds from the last process — fast, fails with "process first" if slots changed), **Process + Create PDF**.
 - **Test-image tools** — per-type % mix + seed fill, plus a **live preview** of the synthetic photo before filling (`GET /api/preview-synthetic/`).
 - **Analysis & exports** — `/analysis/` stage breakdown, p50/p95, scaling chart, CSV/JSON export; `/ocr/`, `/settings/` config pages.
@@ -27,6 +28,17 @@ can be varied; every processed image is logged (DB rows + `logs/pipeline.jsonl`)
 
 Requirements: Python 3.12, `libmagic1`, and optionally `tesseract-ocr tesseract-ocr-eng`
 (Ubuntu/Debian: `sudo apt-get install -y python3 python3-venv libmagic1 tesseract-ocr tesseract-ocr-eng`).
+
+No sudo? Install tesseract user-locally (`eng` + `osd` data files are both required — OSD cannot run on the plain `eng` model):
+
+```bash
+mkdir -p /tmp/ts && cd /tmp/ts
+apt-get download tesseract-ocr libtesseract5 libleptonica6 tesseract-ocr-eng tesseract-ocr-osd
+mkdir -p ~/.local/tesseract && for d in *.deb; do dpkg-deb -x "$d" ~/.local/tesseract; done
+export PATH="$HOME/.local/tesseract/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$HOME/.local/tesseract/usr/lib/x86_64-linux-gnu"
+export TESSDATA_PREFIX="$HOME/.local/tesseract/usr/share/tesseract-ocr/5/tessdata"
+```
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate

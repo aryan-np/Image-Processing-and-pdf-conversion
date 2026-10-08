@@ -28,14 +28,30 @@ SCENARIO_META = {
 LOREM = ["Name: Test User", "Doc No: 12-34-56-78901", "Issued: 2024-01-15",
          "Address: Kathmandu, Nepal", "Ref: FELLOW-2026-0042", "Signature: ______"]
 
+def _font(size):
+    try:
+        return ImageFont.truetype("DejaVuSans.ttf", size)
+    except Exception:
+        try:
+            return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size)
+        except Exception:
+            return ImageFont.load_default()
+
 def _base_doc(w=1200, h=1600, title="TEST DOCUMENT", rng=None, stamp=False, portrait_card=False):
     img = Image.new("RGB", (w, h), "white")
     d = ImageDraw.Draw(img)
     d.rectangle([8, 8, w - 8, h - 8], outline="black", width=4)
-    d.text((40, 40), title, fill="black")
-    y = 120
-    for line in LOREM:
-        d.text((40, y), line, fill=(30, 30, 30)); y += 45
+    size = max(12, w // 40)
+    d.text((40, 40), title, font=_font(size + 4), fill="black")
+    # dense body text (repeated deterministically): needed so Tesseract OSD
+    # has enough characters for orientation, and closer to a real document
+    y = 40 + size + 30
+    step = size + size // 2
+    n = 0
+    while y < h - 150 and n < 26:
+        d.text((40, y), LOREM[n % len(LOREM)], font=_font(size), fill=(30, 30, 30))
+        y += step
+        n += 1
     if portrait_card:
         d.rectangle([w - 320, 120, w - 80, 420], outline="gray", width=3)
         d.text((w - 300, 250), "PHOTO", fill="gray")

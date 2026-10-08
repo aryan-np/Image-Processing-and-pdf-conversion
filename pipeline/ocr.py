@@ -13,11 +13,21 @@ def tesseract_version():
         return ""
 
 def osd_info(pil_img, languages="eng"):
-    """Returns dict rotate/confidence/script... raises if unavailable."""
+    """Returns dict rotate/confidence/script... raises if unavailable.
+
+    OSD must run with the `osd` model (`-l osd`): the LSTM language models
+    (eng, nep, ...) carry no legacy OSD engine and fail with
+    "OSD requires a model for the legacy engine". Script identification still
+    works under `-l osd`. `languages` is kept for API compatibility and is
+    recorded by the caller, not used here.
+    """
     import pytesseract
     img = pil_img.copy()
-    img.thumbnail((800, 800))
-    raw = pytesseract.image_to_osd(img, lang=languages.split("+")[0], config="--psm 0")
+    # 1200px: smaller thumbs starve OSD of characters (800px misreads:
+    # upright->180, sideways->90 at junk confidence); 1200px reads 0/270/180
+    # correctly at ~0.4s with confidence well above the 2.0 gate.
+    img.thumbnail((1200, 1200))
+    raw = pytesseract.image_to_osd(img, lang="osd", config="--psm 0")
     rotate, conf, script, script_conf = 0, -1.0, "", -1.0
     for line in raw.splitlines():
         if "Rotate:" in line:

@@ -1,4 +1,5 @@
 import io, json, os
+import pytest
 os.environ.setdefault("GEN_BACKEND", "sync")
 import django
 from django.test import Client
@@ -241,3 +242,43 @@ def test_osd_below_confidence_gate_not_trusted():
         assert m["method"] == "osd_low_conf", m
     finally:
         orient_mod._tesseract_available = real
+
+@pytest.mark.parametrize("mode,method", [("FALLBACK", "osd_fallback"), ("ALWAYS", "osd")])
+def test_ocr_fixes_sideways_90(mode, method):
+    """Sideways photo is straightened via Tesseract OSD when OCR is on."""
+    import pytest
+    from pipeline.ocr import tesseract_available
+    if not tesseract_available():
+        pytest.skip("tesseract missing")
+    data = _img("sideways_90")
+    jpeg, m, evts = process_image(data, slot_label="S", ocr_mode=mode,
+                                  log_path="/tmp/opencode/osd_test.jsonl")
+    assert m["orientation_method"] == method, m
+    assert m["rotation"] == 270, m
+    assert m["osd_confidence"] >= 2.0, m
+    assert m["out_h"] > m["out_w"]  # back to portrait
+    assert len(evts) == 1 and len(jpeg) > 1000
+
+@pytest.mark.parametrize("mode,method", [("FALLBACK", "osd_fallback"), ("ALWAYS", "osd")])
+def test_ocr_fixes_upside_down_180(mode, method):
+    import pytest
+    from pipeline.ocr import tesseract_available
+    if not tesseract_available():
+        pytest.skip("tesseract missing")
+    data = _img("upside_down_180")
+    jpeg, m, evts = process_image(data, slot_label="U", ocr_mode=mode,
+                                  log_path="/tmp/opencode/osd_test.jsonl")
+    assert m["orientation_method"] == method, m
+    assert m["rotation"] == 180, m
+    assert m["osd_confidence"] >= 2.0, m
+    assert len(evts) == 1 and len(jpeg) > 1000
+
+def test_ocr_leaves_upright_alone():
+    import pytest
+    from pipeline.ocr import tesseract_available
+    if not tesseract_available():
+        pytest.skip("tesseract missing")
+    data = _img("clean_scan")
+    _, m, _ = process_image(data, slot_label="C", ocr_mode="ALWAYS",
+                            log_path="/tmp/opencode/osd_test.jsonl")
+    assert m["rotation"] == 0, m
