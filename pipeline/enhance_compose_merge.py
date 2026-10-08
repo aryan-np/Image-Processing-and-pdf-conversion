@@ -16,9 +16,9 @@ def stage_enhance(pil_img, enabled=True):
 
 def stage_compose(pil_img, max_long=2000, quality=82):
     w, h = pil_img.size
-    s = min(1.0, max_long / max(w, h))
+    s = min(1.0, max_long / max(w, h))  # never enlarge; ~200 DPI on A4
     if s < 1.0:
-        pil_img = pil_img.resize((int(w * s), int(h * s)))
+        pil_img = pil_img.resize((int(w * s), int(h * s)), Image.LANCZOS)
     buf = io.BytesIO()
     pil_img.save(buf, "JPEG", quality=quality)
     data = buf.getvalue()

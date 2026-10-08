@@ -16,7 +16,7 @@ SCENARIO_META = {
     "perspective": ("Perspective / keystone", False),
     "sideways_90": ("Sideways 90°", False),
     "upside_down_180": ("Upside down 180°", False),
-    "white_on_white": ("White on white", False),
+    "white_on_white": ("White on white (rejected: darker surface needed)", True),
     "low_res": ("Low resolution (rejected)", True),
     "blurry": ("Blurry (rejected)", True),
     "huge_12mp": ("Huge 12MP (slow)", False),

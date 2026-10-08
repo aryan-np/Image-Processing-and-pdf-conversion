@@ -28,7 +28,7 @@ def _blur_score(pil_img):
     import cv2, numpy as np
     g = np.array(pil_img.convert("L"))
     h, w = g.shape
-    s = min(1.0, 800 / max(h, w))
+    s = min(1.0, 1000 / max(h, w))  # Guide Section 3: 1000px grayscale copy
     if s < 1:
         g = cv2.resize(g, (int(w * s), int(h * s)))
     return float(cv2.Laplacian(g, cv2.CV_64F).var())
@@ -95,13 +95,26 @@ def validate_upload(data: bytes, filename: str):
     # 8 page sanity via detect
     t0 = time.perf_counter()
     try:
-        from pipeline.detect import stage_detect, SECOND_REJECT
+        from pipeline.detect import stage_detect, SECOND_REJECT, RECT_MIN, MIN_AREA, MAX_AREA
         info, dm = stage_detect(im.convert("RGB"))
         area, second = dm["area_ratio"], dm["second_ratio"]
-        # reject two equally-large objects (spec 5.2: 2nd contour above ~40%)
-        ok = area >= 0.05 and second <= SECOND_REJECT
-        log("page_detect", f"area={area} second={second}", f"area>=0.05, second<={SECOND_REJECT}", ok, time.perf_counter() - t0)
-        if not ok: return False, f"page sanity failed (area={area}, second={second})", dm, logs
+        # Guide Sections 3-4: area 10-97% + rectangularity >= 0.90 + second <= 40%.
+        # Full-bleed scans (>97%, e.g. flatbed) are accepted iff they carry real
+        # content to trim to; blank white-on-white is rejected (photo the page
+        # on a darker surface instead).
+        rect = dm.get("rectangularity")
+        if MIN_AREA <= area <= MAX_AREA:
+            ok = second <= SECOND_REJECT and (rect is None or rect >= RECT_MIN)
+            detail = f"area={area} rect={rect} second={second}"
+        else:
+            from pipeline.crop import _trim
+            _, trimmed = _trim(im.convert("RGB"))
+            ok = bool(trimmed)
+            detail = f"full-bleed area={area} content={bool(trimmed)}"
+        log("page_detect", detail,
+            f"area {MIN_AREA}-{MAX_AREA}, rect>={RECT_MIN}, second<={SECOND_REJECT}",
+            ok, time.perf_counter() - t0)
+        if not ok: return False, f"document edges not detected ({detail})", dm, logs
         measured = {"w": w, "h": h, "mp": mp, "blur": score, "mime": mime, "format": (im.format or "").lower()}
         measured.update(dm)
         return True, "", measured, logs

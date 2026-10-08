@@ -10,7 +10,7 @@
 <tr><th>source</th><td>{{ img.orig_w }}×{{ img.orig_h }} {{ img.source_format }} {{ img.file_size }}B · exif {{ img.exif_orientation }} · {{ img.megapixels }}MP · {{ img.original_filename }}</td></tr>
 <tr><th>detect</th><td>area {{ img.area_ratio }} · angle {{ img.detected_angle }} · second {{ img.second_contour_ratio }} · quad {{ img.quad_confidence }}</td></tr>
 <tr><th>orientation</th><td>method {{ img.orientation_method|default:"—" }} · rotation {{ img.rotation_applied }}° · osd conf {{ img.osd_confidence|default:"—" }}</td></tr>
-<tr><th>align</th><td>method {{ img.align_method|default:"—" }} · skew {{ img.skew_angle }}° · deskew {{ img.deskew_applied }}°{% if img.align_method %} · thresholds: fix at ≥ 0.3°, never above 15°{% endif %}</td></tr>
+<tr><th>align</th><td>method {{ img.align_method|default:"—" }} · skew {{ img.skew_angle }}° · deskew {{ img.deskew_applied }}°{% if img.align_method %} · thresholds: fix at ≥ 0.5°, limit 45°{% endif %}</td></tr>
 <tr><th>output</th><td>{{ img.out_w }}×{{ img.out_h }} · {{ img.out_jpeg_bytes }}B · fallback {{ img.fallback_used|default:"—" }}</td></tr>
 <tr><th>resources</th><td>RSS Δ {{ img.rss_delta }}B · alloc peak {{ img.alloc_peak }}B · thread {{ img.thread_id }}</td></tr>
 <tr><th>warnings</th><td>{{ img.warnings|default:"—" }} {{ img.exception }}</td></tr>

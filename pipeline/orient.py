@@ -33,12 +33,15 @@ def stage_orientation(pil_img, expected="any", ocr_mode="OFF", ocr_fn=None,
             osd_conf = float(osd_info.get("confidence", -1))
             if ocr_mode == "ALWAYS":
                 rotation, method = rot, "osd"
-            elif ocr_mode == "FALLBACK" and ambiguous and osd_conf >= 0:
-                # only trust OSD if it claims a rotation
-                if rot in (90, 180, 270):
+            elif ocr_mode == "FALLBACK" and ambiguous:
+                # Guide step 8: accept OSD at confidence 2.0+; below 2.0
+                # leave the image as is and flag (do not guess).
+                if osd_conf >= 2.0 and rot in (90, 180, 270):
                     rotation, method = rot, "osd_fallback"
-                else:
+                elif osd_conf >= 2.0:
                     method = "aspect_or_none"
+                else:
+                    method = "osd_low_conf"
         except Exception as e:
             osd_info = {"error": str(e)}
     out = pil_img

@@ -112,15 +112,21 @@ def test_pipeline_includes_align_stage():
     assert "skew_angle" in m and "deskew_deg" in m and "align_method" in m
 
 def test_pipeline_align_fixes_tilted_photo():
+    # tilted full-bleed shot: edge retry finds the page -> poly warp straightens
+    # it (fallback ""), align then correctly finds nothing left to do
+    from pipeline.align import stage_align
     data = _img("clean_scan")
     img, _ = stage_load(data)
     tilted = img.rotate(-7, expand=True, fillcolor=(255, 255, 255))
     buf = io.BytesIO(); tilted.save(buf, "JPEG", quality=85)
     jpeg, m, _ = process_image(buf.getvalue(), slot_label="T", ocr_mode="OFF")
-    assert m["aligned"] is True, m
-    assert abs(abs(m["deskew_deg"]) - 7) < 1.5, m
-    assert any(str(w).startswith("deskew:") for w in m["warnings"])
+    assert m["fallback"] == "" and m.get("warp") == "poly_warp", m
+    assert any("edge" in e["msg"] or "warp" in e["msg"] for e in m["steps"])
     assert len(jpeg) > 1000
+    # output is level: a fresh align pass finds no tilt
+    out_img, _ = stage_load(jpeg)
+    _, am = stage_align(out_img)
+    assert am["aligned"] is False and abs(am["skew_angle"]) < 0.5, am
 
 def test_align_repad_leaves_uniform_border():
     """After deskew the border/padding must be axis-aligned (equal on all sides)."""
@@ -157,18 +163,19 @@ def test_process_image_logs_steps_with_thresholds():
     timed = [e for e in entries if e["stage"] not in ("start",)]
     assert all(isinstance(e["ms"], (int, float)) and e["ms"] >= 0 for e in timed)
     blob = "\n".join(e["msg"] for e in entries)
-    for needle in ("30–98%", "0.3°"):  # thresholds are stated
+    for needle in ("10–97%", "0.90", "0.5°"):  # guide thresholds are stated
         assert needle in blob, blob
     assert "dark background" in blob  # bg type stated for bg photos
-    # a tilted full-bleed shot exercises the deskew branch incl. its 15° limit
+    # a corner-clipped tilt trims (no quad) so the deskew branch fires with
+    # original vs processed tilt both stated
     tdata = _img("clean_scan")
     timg, _ = stage_load(tdata)
-    tilted = timg.rotate(-7, expand=True, fillcolor=(255, 255, 255))
+    tilted = timg.rotate(-7, fillcolor=(255, 255, 255))  # no expand: corners clipped
     buf = io.BytesIO(); tilted.save(buf, "JPEG", quality=85)
     _, tm, _ = process_image(buf.getvalue(), slot_label="TILT", ocr_mode="OFF")
+    assert tm["aligned"] is True, tm
     tblob = "\n".join(e["msg"] for e in tm["steps"])
-    assert "15°" in tblob and tm["aligned"] is True, tblob
-    # align step states original vs processed tilt
+    assert "45°" in tblob, tblob
     align_msgs = [e["msg"] for e in tm["steps"] if e["stage"] == "align"]
     assert align_msgs and "Original tilt" in align_msgs[0]
     assert "processed tilt" in align_msgs[0], align_msgs
@@ -181,8 +188,9 @@ def test_detect_extracts_document_from_dark_bg():
         data = _img(sc, seed=3)
         img, _ = stage_load(data)
         info, dm = stage_detect(img)
-        assert 0.30 <= dm["area_ratio"] <= 0.98, (sc, dm)
+        assert 0.10 <= dm["area_ratio"] <= 0.97, (sc, dm)
         assert dm["second_ratio"] <= 0.40, (sc, dm)
+        assert dm["rectangularity"] >= 0.90, (sc, dm)
         assert dm["bg_dark"] is True, (sc, dm)
         out, cm = stage_crop_deskew(img, info, dm)
         assert cm["warp"] in ("poly_warp", "rect_warp") and cm["fallback"] == "", (sc, cm)
@@ -193,12 +201,43 @@ def test_detect_white_on_white_trims_only():
     data = _img("white_on_white")
     img, _ = stage_load(data)
     info, dm = stage_detect(img)
-    assert dm["area_ratio"] > 0.98, dm  # edge not found -> trim only
+    assert dm["area_ratio"] > 0.97, dm  # edge not found -> trim only
     assert dm["bg_dark"] is False, dm
 
 def test_upload_rejects_two_objects():
     from core.validation import validate_upload
     data, _ = generate("two_objects", seed=1)
     ok, err, measured, logs = validate_upload(data, "two.jpg")
-    assert not ok and "page sanity" in err, (ok, err)
+    assert not ok and "document edges not detected" in err, (ok, err)
     assert measured.get("second_ratio", 0) > 0.40, measured
+
+def test_upload_accepts_good_and_rejects_blank():
+    from core.validation import validate_upload
+    for sc in ("clean_scan", "photo_dark_bg", "perspective", "sideways_90"):
+        data, _ = generate(sc, seed=1)
+        ok, err, _, _ = validate_upload(data, "x.jpg")
+        assert ok, (sc, err)
+    for sc in ("white_on_white", "blurry", "two_objects"):
+        data, _ = generate(sc, seed=1)
+        ok, err, _, _ = validate_upload(data, "x.jpg")
+        assert not ok, (sc, ok)
+
+def test_osd_below_confidence_gate_not_trusted():
+    """Guide step 8: OSD confidence below 2.0 -> leave as is, do not guess."""
+    from pipeline.orient import stage_orientation
+    import pipeline.orient as orient_mod
+    data = _img("clean_scan")
+    img, _ = stage_load(data)
+    calls = []
+    def weak_ocr(im):
+        calls.append(1)
+        return {"rotate": 90, "confidence": 1.0}
+    real = orient_mod._tesseract_available
+    orient_mod._tesseract_available = lambda: True
+    try:
+        out, m = stage_orientation(img, expected="any", ocr_mode="FALLBACK",
+                                   ocr_fn=weak_ocr, ocr_fallback_enabled=True)
+        assert len(calls) == 1 and m["rotation"] == 0, m
+        assert m["method"] == "osd_low_conf", m
+    finally:
+        orient_mod._tesseract_available = real

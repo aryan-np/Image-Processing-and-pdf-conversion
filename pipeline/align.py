@@ -17,11 +17,11 @@ low-confidence cases return the image unchanged with aligned=False.
 import math
 import cv2
 import numpy as np
-from PIL import ImageOps
+from PIL import Image, ImageOps
 
-# Thresholds (also reported in logs / image-detail so the user can see them).
-MIN_ANGLE = 0.3   # ignore skew below this (noise floor), degrees
-MAX_ANGLE = 15.0  # never correct more than this (likely a mis-detection)
+# Thresholds (Cropping & Alignment Guide, Section 2 step 6; also in logs).
+MIN_ANGLE = 0.5   # skip when tilt is under this (avoids needless softening)
+MAX_ANGLE = 45.0  # Hough fold range; spread check still guards mis-detection
 WHITE_THRESH = 240  # pixels >= this count as blank margin when re-squaring
 PAD_RATIO = 0.02  # uniform white padding re-applied after deskew
 
@@ -144,7 +144,8 @@ def stage_align(pil_img, max_side=1000, min_angle=MIN_ANGLE, max_angle=MAX_ANGLE
     # PIL rotate() is counter-clockwise; image y-axis points down so a line
     # sloping down-right (positive skew) needs a CCW (+skew) rotation to level.
     # Verified empirically: +7deg tilted doc -> skew ~= +7 -> rotate(+7) straightens.
-    out = pil_img.rotate(skew, expand=True, fillcolor=(255, 255, 255))
+    out = pil_img.rotate(skew, expand=True, resample=Image.BICUBIC,
+                         fillcolor=(255, 255, 255))
     out, repad = _trim_and_repad(out)
     # re-measure on the processed image: leftover tilt after the fix
     residual, _, _ = _measure(out, max_side)

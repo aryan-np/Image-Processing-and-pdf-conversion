@@ -91,22 +91,27 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
         m.update({"area_ratio": dm["area_ratio"], "detected_angle": dm["angle"],
                   "second_ratio": dm["second_ratio"], "quad_confidence": dm["quad_confidence"]})
         bg = "dark background" if dm.get("bg_dark") else "light background"
-        emit("detect", f"Detecting page on {bg} · covers {dm['area_ratio'] * 100:.1f}% of the photo "
-                       f"(warp needs 30–98%, else trim only) · angle {dm['angle']}° · "
-                       f"quad confidence {dm['quad_confidence']} · 2nd contour {dm['second_ratio']}",
+        via = "edge retry (Canny 20/60)" if dm.get("detect_method") == "edges" else "brightness split (Otsu)"
+        emit("detect", f"Detecting page via {via} on {bg} · covers {dm['area_ratio'] * 100:.1f}% "
+                       f"(warp needs 10–97%, rectangularity ≥0.90, 2nd ≤40%) · "
+                       f"rectangularity {dm.get('rectangularity')} · angle {dm['angle']}° · "
+                       f"quad {dm['quad_confidence']} · 2nd contour {dm['second_ratio']}",
              stage_ms["detect"])
         cropped, cm = timed("crop_deskew", stage_crop_deskew, img, dinfo, dm)
         m["fallback"] = cm.get("fallback", "")
         m["warp"] = cm.get("warp", "")
         if cm.get("warp") == "poly_warp":
-            emit("crop_deskew", f"Cropping page: 4-corner perspective warp + 2% padding · "
-                         f"background removed, only the document kept", stage_ms["crop_deskew"])
+            emit("crop_deskew", f"Cropping page: 4-corner perspective warp (INTER_CUBIC, "
+                                f"rectangularity {dm.get('rectangularity')} ≥ 0.90) · 1% edge shave + "
+                                f"2% padding · background removed, only the document kept",
+                 stage_ms["crop_deskew"])
         elif cm.get("warp") == "rect_warp":
-            emit("crop_deskew", f"Cropping page: bounding-box warp + 2% padding · "
-                         f"background removed, only the document kept", stage_ms["crop_deskew"])
+            emit("crop_deskew", f"Cropping page: rotate-only bounding-box warp "
+                                f"(rectangularity {dm.get('rectangularity')} < 0.90) + 2% padding · "
+                                f"background removed, only the document kept", stage_ms["crop_deskew"])
         else:
-            emit("crop_deskew", f"No clean page edge (area {dm['area_ratio'] * 100:.1f}% outside 30–98%) → "
-                         f"{m['fallback']}: trimming white margins instead of warping",
+            emit("crop_deskew", f"No clean page edge (area {dm['area_ratio'] * 100:.1f}% outside 10–97%) → "
+                                f"{m['fallback']}: trimming white margins instead of warping",
                  stage_ms["crop_deskew"])
 
         # OCR callback wiring
@@ -165,14 +170,14 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
                   "repad": am.get("repad", False),
                   "residual_skew": am.get("residual_skew", 0.0)})
         if am["aligned"]:
-            emit("align", f"Original tilt {am['skew_angle']}° (≥ 0.3° threshold, limit 15°, "
+            emit("align", f"Original tilt {am['skew_angle']}° (fix at ≥ 0.5°, limit 45°, "
                           f"{am['n_lines']} text lines via {am['method']}) → rotated "
                           f"{am['corrected_deg']}° to fix, border re-squared + uniform 2% padding · "
                           f"processed tilt {am.get('residual_skew', 0.0)}°", stage_ms["align"])
         else:
             emit("align", f"Level · original tilt {am['skew_angle']}°, processed tilt "
                           f"{am.get('residual_skew', am['skew_angle'])}° "
-                          f"(below 0.3° threshold) · skipping ({am['method']})",
+                          f"(skip under 0.5°, limit 45°) · skipping ({am['method']})",
                  stage_ms["align"])
         enhanced, em = timed("enhance", stage_enhance, aligned, enhance_enabled)
         if enhance_enabled:
