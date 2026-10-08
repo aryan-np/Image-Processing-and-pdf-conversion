@@ -97,7 +97,7 @@ box.innerHTML=`<div class="statgrid" style="margin:10px 0 0">
 <div class="stat"><div class="v">${fmtT(r.images_ms)}</div><div class="k">all ${n} images</div></div>
 <div class="stat"><div class="v">${avg}</div><div class="k">single image (avg)</div></div>
 <div class="stat"><div class="v">${r.pdf_ms?fmtT(r.pdf_ms):'—'}</div><div class="k">PDF build${r.pages?` · ${r.pages}p`:''}</div></div></div>
-<div><a href="/runs/${r.id}/">run ${r.id} details →</a></div>`}
+<div><a href="/runs/${r.id}/">run ${r.id} details →</a> <span class="badge ${r.ocr_mode==='OFF'?'warn':'info'}">ocr ${r.ocr_mode}</span>${r.ocr_mode!==d.ocr_mode?` <span class="badge stale">⚠ session is now ${d.ocr_mode} — re-process to apply it</span>`:''}</div>`}
 function renderSlots(){const d=CACHE;if(!d)return;const q=(document.getElementById('q').value||'').toLowerCase();
 const slots=d.slots.filter(s=>!q||s.label.toLowerCase().includes(q)||s.group.toLowerCase().includes(q));
 const filled=d.slots.filter(s=>s.url).length, failed=d.slots.filter(s=>s.upload_status==='FAILED').length;
@@ -124,6 +124,7 @@ if(!slots.length)host.innerHTML='<p class="muted">No slots yet — add some abov
 function renderRuns(d){document.getElementById('runs').innerHTML=d.runs.map(r=>
 `<div class="row" style="padding:4px 0"><a href="/runs/${r.id}/"><b>run ${r.id}</b></a>
 <span class="statuspill ${r.status}" style="font-size:11px">${r.status}</span>
+<span class="badge ${r.ocr_mode==='OFF'?'warn':'info'}" style="font-size:11px">ocr ${r.ocr_mode}</span>
 <span class="muted">total ${fmtT(r.total_ms)} · images ${fmtT(r.images_ms)} · single ~${r.images[0]?fmtT((r.images_ms||0)/r.images[0]):'—'} · pdf ${r.pdf_ms?fmtT(r.pdf_ms):'—'}</span></div>`).join('')||'no runs yet'}
 function startPoll(){stopPoll();POLLT=setInterval(pollTick,1000)}
 function stopPoll(){if(POLLT){clearInterval(POLLT);POLLT=null}}

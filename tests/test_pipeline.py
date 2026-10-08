@@ -282,3 +282,10 @@ def test_ocr_leaves_upright_alone():
     _, m, _ = process_image(data, slot_label="C", ocr_mode="ALWAYS",
                             log_path="/tmp/opencode/osd_test.jsonl")
     assert m["rotation"] == 0, m
+
+def test_orientation_message_explains_why_no_rotation():
+    data = _img("sideways_90")
+    _, m, _ = process_image(data, slot_label="S", ocr_mode="OFF",
+                            log_path="/tmp/opencode/osd_test.jsonl")
+    msgs = [e["msg"] for e in m["steps"] if e["stage"] == "orientation"]
+    assert msgs and "OCR is OFF" in msgs[0], msgs

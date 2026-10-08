@@ -157,12 +157,24 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
             emit("orientation", f"OCR text read (confidence {om['osd_confidence']}) → "
                                 f"rotated {om['rotation']}° (method {om['method']}, mode {ocr_mode})",
                  stage_ms["orientation"])
+        elif isinstance(om.get("osd"), dict) and om["osd"].get("error"):
+            emit("orientation", f"OCR attempt FAILED ({om['osd']['error'][:120]}) · "
+                                f"leaving as is — check tesseract install and /ocr/ logs",
+                 stage_ms["orientation"])
         elif om["rotation"]:
             emit("orientation", f"Aspect expects {expected_orientation} → "
                                 f"rotated {om['rotation']}° (method {om['method']}, no OCR needed)",
                  stage_ms["orientation"])
         else:
-            emit("orientation", f"Already upright (method {om['method']}, mode {ocr_mode}) · no rotation",
+            if ocr_mode == "OFF":
+                why = "OCR is OFF — a sideways/upside-down page stays as-is in this mode"
+            elif not tesseract_available():
+                why = "tesseract NOT installed — install it or rotations stay as-is"
+            elif om.get("fallback_gated"):
+                why = "FALLBACK gated off by OCR_FALLBACK_ENABLED=false"
+            else:
+                why = "no rotation"
+            emit("orientation", f"No rotation applied (method {om['method']}, mode {ocr_mode}) · {why}",
                  stage_ms["orientation"])
         aligned, am = timed("align", stage_align, oriented)
         m.update({"skew_angle": am["skew_angle"], "deskew_deg": am["corrected_deg"],

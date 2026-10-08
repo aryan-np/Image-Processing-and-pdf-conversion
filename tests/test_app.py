@@ -246,3 +246,20 @@ def test_run_detail_compare(settings):
     # 2 originals + 2 processed-from-this-run previews
     assert html.count("data-cap=") == 4
     assert "_process_cache" in html
+
+@pytest.mark.django_db
+def test_run_banner_states_ocr_mode(settings):
+    settings.GEN_BACKEND = "sync"
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from core.services import _progress
+    s = Session.objects.create(name="B", ocr_mode="OFF")
+    slot = Slot.objects.create(session=s, label="D0", group="G", order=0,
+                               layout="single", required=True)
+    data, _ = generate("clean_scan", seed=31, title="D0")
+    Client().post(f"/api/slots/{slot.id}/upload/",
+                  {"file": SimpleUploadedFile("a.jpg", data, "image/jpeg")})
+    rid = Client().post(f"/api/sessions/{s.id}/generate/",
+                        data=json.dumps({"process_only": True}),
+                        content_type="application/json").json()["data"]["run_id"]
+    tail = _progress.get(rid, {}).get("tail", [])
+    assert tail and "OCR mode OFF" in tail[0], tail[:2]

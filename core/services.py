@@ -203,6 +203,17 @@ def run_generation_sync(gen_run_id, backend=None):
     status, err = "READY", ""
     pdf_bytes, pages = b"", 0
     try:
+        from pipeline.ocr import tesseract_available as _tess_ok
+        _has_ocr = _tess_ok()
+    except Exception:
+        _has_ocr = False
+    _tail_append(gen_run_id,
+                 f"Run {gen_run_id}: OCR mode {run.ocr_mode} · "
+                 + ("tesseract found — sideways/upside-down pages will be auto-rotated"
+                    if _has_ocr and run.ocr_mode in ("FALLBACK", "ALWAYS") else
+                    "tesseract MISSING — install it or rotations stay as-is" if not _has_ocr else
+                    "OCR OFF — sideways/upside-down pages will NOT be rotated"))
+    try:
         slots = list(sess.slots.filter(media_path__gt="").order_by("order"))
         run.images_total = len(slots)
         run.save(update_fields=["images_total"])
