@@ -1,5 +1,53 @@
 """OCR helpers (pure; pytesseract optional)."""
-import shutil, time
+import os, shutil, time
+from pathlib import Path
+
+def bootstrap_tesseract():
+    """Pick up a user-local (no-sudo) tesseract install.
+
+    If `tesseract` is not already on PATH, look in well-known user-local
+    spots (plus $TESSERACT_BIN) and extend PATH/LD_LIBRARY_PATH/
+    TESSDATA_PREFIX in-process (never overriding existing env). Returns True
+    when the binary is findable afterwards. Called at import so Django,
+    tests and loadtest all benefit without shell setup.
+    """
+    if shutil.which("tesseract") is not None:
+        return True
+    cands = []
+    env_bin = os.environ.get("TESSERACT_BIN", "").strip()
+    if env_bin:
+        cands.append(Path(env_bin))
+    try:
+        home = Path.home()
+    except Exception:
+        home = None
+    if home is not None:
+        cands.append(home / ".local" / "tesseract" / "usr" / "bin" / "tesseract")
+    cands.append(Path("/opt/tesseract/bin/tesseract"))
+    for binpath in cands:
+        try:
+            if not (binpath.is_file() and os.access(binpath, os.X_OK)):
+                continue
+            prefix = binpath.parent.parent  # <prefix>/bin/tesseract
+            os.environ["PATH"] = str(binpath.parent) + os.pathsep + os.environ.get("PATH", "")
+            for lib in (prefix / "lib" / "x86_64-linux-gnu", prefix / "lib"):
+                if lib.is_dir():
+                    cur = os.environ.get("LD_LIBRARY_PATH", "")
+                    if str(lib) not in cur.split(os.pathsep):
+                        os.environ["LD_LIBRARY_PATH"] = str(lib) + (os.pathsep + cur if cur else "")
+            if not os.environ.get("TESSDATA_PREFIX"):
+                for td in (prefix / "share" / "tesseract-ocr" / "5" / "tessdata",
+                           prefix / "share" / "tessdata"):
+                    if td.is_dir():
+                        os.environ["TESSDATA_PREFIX"] = str(td)
+                        break
+            if shutil.which("tesseract") is not None:
+                return True
+        except Exception:
+            continue
+    return False
+
+bootstrap_tesseract()
 
 def tesseract_available():
     return shutil.which("tesseract") is not None

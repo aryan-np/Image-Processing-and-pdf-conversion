@@ -83,6 +83,12 @@ try:
 except Exception:
     pass
 
+try:
+    from pipeline.ocr import bootstrap_tesseract  # picks up user-local tesseract into PATH
+    bootstrap_tesseract()
+except Exception:
+    pass
+
 TESSERACT_AVAILABLE = shutil.which("tesseract") is not None
 
 LOGGING = {

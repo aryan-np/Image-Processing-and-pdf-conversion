@@ -289,3 +289,24 @@ def test_orientation_message_explains_why_no_rotation():
                             log_path="/tmp/opencode/osd_test.jsonl")
     msgs = [e["msg"] for e in m["steps"] if e["stage"] == "orientation"]
     assert msgs and "OCR is OFF" in msgs[0], msgs
+
+def test_bootstrap_finds_user_local_tesseract(tmp_path, monkeypatch):
+    """No-sudo install at ~/.local/tesseract is picked up with bare PATH."""
+    import os, stat
+    from pathlib import Path
+    import pipeline.ocr as ocr_mod
+    fake = tmp_path / ".local" / "tesseract" / "usr"
+    (fake / "bin").mkdir(parents=True)
+    (fake / "lib" / "x86_64-linux-gnu").mkdir(parents=True)
+    (fake / "share" / "tesseract-ocr" / "5" / "tessdata").mkdir(parents=True)
+    stub = fake / "bin" / "tesseract"
+    stub.write_text("#!/bin/sh\necho stub\n")
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+    assert ocr_mod.bootstrap_tesseract() is True
+    import shutil
+    assert shutil.which("tesseract") == str(stub)
+    assert os.environ["TESSDATA_PREFIX"].endswith("tessdata")

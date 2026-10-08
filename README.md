@@ -40,6 +40,9 @@ export LD_LIBRARY_PATH="$HOME/.local/tesseract/usr/lib/x86_64-linux-gnu"
 export TESSDATA_PREFIX="$HOME/.local/tesseract/usr/share/tesseract-ocr/5/tessdata"
 ```
 
+The app also auto-detects that exact spot (`~/.local/tesseract`, plus `$TESSERACT_BIN`)
+at startup, so the dev server finds it without any exports.
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
