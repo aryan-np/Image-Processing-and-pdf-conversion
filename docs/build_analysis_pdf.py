@@ -31,8 +31,8 @@ SMALL = ParagraphStyle("small", parent=styles["Normal"], fontSize=8.5, leading=1
 CELL = ParagraphStyle("cell", parent=styles["Normal"], fontSize=9, leading=12)
 CELLH = ParagraphStyle("cellh", parent=styles["Normal"], fontSize=9, leading=12,
                        textColor=colors.white)
-LOG = ParagraphStyle("log", parent=styles["Code"] if "Code" in styles else styles["Normal"],
-                     fontSize=8.5, leading=11, backColor=colors.HexColor("#0f1728"),
+LOG = ParagraphStyle("log", parent=styles["Normal"], fontSize=8.5, leading=11.5,
+                     backColor=colors.HexColor("#0f1728"),
                      textColor=colors.HexColor("#cfe3ff"), borderPadding=6)
 
 TSTYLE = TableStyle([
@@ -49,7 +49,7 @@ TSTYLE = TableStyle([
 
 P = lambda t: Paragraph(t, BODY)
 C = lambda t: Paragraph(t, CELL)
-L = lambda t: Paragraph(t.replace(" ", "&nbsp;"), LOG)
+L = lambda t: Paragraph(t, LOG)
 
 
 def header(canvas, doc):
