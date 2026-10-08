@@ -31,9 +31,8 @@ SMALL = ParagraphStyle("small", parent=styles["Normal"], fontSize=8.5, leading=1
 CELL = ParagraphStyle("cell", parent=styles["Normal"], fontSize=9, leading=12)
 CELLH = ParagraphStyle("cellh", parent=styles["Normal"], fontSize=9, leading=12,
                        textColor=colors.white)
-LOG = ParagraphStyle("log", parent=styles["Normal"], fontSize=8.5, leading=11.5,
-                     backColor=colors.HexColor("#0f1728"),
-                     textColor=colors.HexColor("#cfe3ff"), borderPadding=6)
+LOG = ParagraphStyle("log", parent=styles["Normal"], fontSize=8.5, leading=12,
+                     textColor=colors.HexColor("#cfe3ff"))
 
 TSTYLE = TableStyle([
     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f4a94")),
@@ -49,7 +48,6 @@ TSTYLE = TableStyle([
 
 P = lambda t: Paragraph(t, BODY)
 C = lambda t: Paragraph(t, CELL)
-L = lambda t: Paragraph(t, LOG)
 
 
 def header(canvas, doc):
@@ -69,6 +67,19 @@ def build():
                           topMargin=18 * mm, bottomMargin=15 * mm)
     doc.addPageTemplates([PageTemplate(id="p", frames=[Frame(
         doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f")], onPage=header)])
+    # Log quotes render as single-cell tables (deterministic height — a bare
+    # Paragraph with backColor can mis-measure wrapped lines and overlap).
+    LOGTABLE = TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0f1728")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ])
+
+    def L(t):
+        return Table([[Paragraph(t, LOG)]], colWidths=[doc.width], style=LOGTABLE)
     story = []
     today = date.today().isoformat()
     story += [Paragraph("Server-built PDFs from phone photos", TITLE),
