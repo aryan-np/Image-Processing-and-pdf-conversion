@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}Analysis — SlotLab{% endblock %}{% block body %}
+<h1>Past runs</h1>
+<p class="muted">How long each run took: total, all images, single image average, and PDF build.</p>
+<div class="card"><form class="row">
+<label class="f">OCR <select name="ocr"><option value="">all</option>
+<option {% if f.ocr == 'OFF' %}selected{% endif %}>OFF</option>
+<option {% if f.ocr == 'FALLBACK' %}selected{% endif %}>FALLBACK</option>
+<option {% if f.ocr == 'ALWAYS' %}selected{% endif %}>ALWAYS</option></select></label>
+<label class="f">Images <input name="slots" size="6" value="{{ f.slots }}" placeholder="e.g. 50"></label>
+<button class="ghost">Filter</button>
+<a class="btn ghost sm" href="/analysis/export.csv">⬇ CSV</a>
+<a class="btn ghost sm" href="/analysis/export.json">⬇ JSON</a></form></div>
+<div class="tablewrap"><table><thead><tr><th>Run</th><th>Images</th><th>Total</th><th>All images</th><th>Single image</th><th>PDF</th><th>Pages</th><th>OCR</th></tr></thead><tbody>
+{% for r in runs %}<tr>
+<td><a href="/runs/{{ r.id }}/"><b>{{ r.id }}</b></a><br><span class="muted">{{ r.session.name }}</span></td>
+<td>{{ r.images_total }}</td>
+<td><b>{{ r.total_h }}</b></td>
+<td>{{ r.images_h }}</td>
+<td>{{ r.per_image }}</td>
+<td>{{ r.pdf_h }}</td>
+<td>{{ r.pages }}</td>
+<td><span class="badge">{{ r.ocr_mode }}</span></td></tr>
+{% empty %}<tr><td colspan="8" class="muted">No runs yet — process images in a session first.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

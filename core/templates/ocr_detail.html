@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block body %}
+<h2>OCR {{ o.id }} — {{ o.slot_label }} ({{ o.reason }})</h2>
+<div class="card">tesseract={{ o.tesseract_version }} langs={{ o.languages }} config={{ o.config }} input={{ o.input_w }}x{{ o.input_h }}
+<br>raw OSD:<pre>{{ o.raw_osd }}</pre>
+rotate={{ o.osd_rotate }} conf={{ o.osd_confidence }} script={{ o.osd_script }}({{ o.osd_script_conf }}) applied={{ o.rotation_applied }}
+<br>words={{ o.word_count }} mean={{ o.mean_conf }} min={{ o.min_conf }} ms={{ o.duration_ms }} cpu={{ o.cpu_ms }} success={{ o.success }} err={{ o.exception }}</div>
+<div class="card"><h3>Full text</h3><pre>{{ o.full_text }}</pre></div>
+<div class="card"><h3>Words</h3><table><tr><th>text</th><th>conf</th><th>bbox</th></tr>
+{% for w in o.words %}<tr><td>{{ w.text }}</td><td>{{ w.conf }}</td><td>{{ w.bbox }}</td></tr>{% endfor %}</table></div>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Sessions — SlotLab{% endblock %}{% block body %}
+<h1>Sessions</h1>
+<p class="muted">Each session is a document-consolidation job: slots → validated uploads → one A4 PDF.</p>
+<div class="card"><h3>＋ New session</h3><div class="row">
+<input id="nm" placeholder="session name" value="Demo" size="22">
+<label class="f">OCR <select id="oc"><option>OFF</option><option>FALLBACK</option><option>ALWAYS</option></select></label>
+<label class="f">Preset <select id="pr"><option value="">empty</option><option value="realistic">Realistic (12)</option>
+<option value="25">25 slots</option><option value="50">50 slots</option><option value="100">100 slots</option><option value="200">200 slots</option></select></label>
+<button onclick="mk()">Create session</button>
+<span class="muted">FALLBACK uses OSD only when orientation is ambiguous{% if not slotlab.ocr_fallback %} — <b>currently gated OFF by OCR_FALLBACK_ENABLED=false</b>{% endif %}{% if not slotlab.ocr_available %} — <b>tesseract missing, OCR rows will be zero</b>{% endif %}</span></div></div>
+<div class="tablewrap"><table><thead><tr><th>Name</th><th>Slots</th><th>Filled</th><th>Status</th><th>PDF</th><th>Stale</th><th>Pages</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr><td><b>{{ r.s.name }}</b><br><span class="muted">{{ r.s.ocr_mode }} · {{ r.s.created_at|date:"Y-m-d H:i" }}</span></td>
+<td>{{ r.n }}</td><td>{{ r.filled }}</td>
+<td><span class="statuspill {{ r.s.final_status }}">{{ r.s.final_status }}</span></td>
+<td>{% if r.s.final_media_path %}<span class="badge ok">{{ r.s.final_pdf_size }}B</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+<td>{% if r.s.is_stale %}<span class="badge stale">STALE</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+<td>{{ r.s.final_pages }}</td>
+<td class="row"><a class="btn ghost sm" href="/s/{{ r.s.id }}/">Open →</a><button class="danger sm" onclick="delS('{{ r.s.id }}','{{ r.s.name|escapejs }}')">✕</button></td></tr>
+{% empty %}<tr><td colspan="8" class="muted">No sessions yet — create one above.</td></tr>{% endfor %}</tbody></table></div>
+<script>
+async function mk(){const r=await (await fetch('/api/sessions/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:document.getElementById('nm').value,ocr_mode:document.getElementById('oc').value,preset:document.getElementById('pr').value})})).json();if(r.ok)location.href='/s/'+r.data.id;else toast(r.error,'err')}
+async function delS(id,name){if(!confirm('Delete session "'+name+'" and all its files?'))return;const r=await(await fetch('/api/sessions/'+id+'/',{method:'DELETE'})).json();r.ok?location.reload():toast(r.error,'err')}
+</script>{% endblock %}

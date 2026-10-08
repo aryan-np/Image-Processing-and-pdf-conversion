@@ -1,0 +1,19 @@
+# python
+env/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# django / app data (local only, recreated automatically)
+db.sqlite3
+media/*
+logs/*.jsonl
+logs/*.log
+logs/*.json
+.env
+
+# tests / tooling
+.pytest_cache/
+.coverage
+htmlcov/

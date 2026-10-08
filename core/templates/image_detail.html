@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Image {{ img.slot_label }} — SlotLab{% endblock %}{% block body %}
+<h1>{{ img.slot_label }} <span class="muted" style="font-size:14px">run {{ r.id }} · {{ img.slot_group }}</span>
+{% if img.status == 'OK' %}<span class="badge ok">OK</span>{% elif img.status == 'WARN' %}<span class="badge warn">WARN</span>{% else %}<span class="badge err">FAILED</span>{% endif %}</h1>
+<div class="card"><h3>⏱ Stage timings ({{ img.total_ms|floatformat:1 }}ms total)</h3>
+<div class="tablewrap"><table><thead><tr><th>stage</th><th>ms</th></tr></thead><tbody>
+{% for k,v in img.stage_ms.items %}<tr><th style="background:none">{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+<div class="card"><h3>🔍 Metrics &amp; decisions</h3>
+<div class="tablewrap"><table><tbody>
+<tr><th>source</th><td>{{ img.orig_w }}×{{ img.orig_h }} {{ img.source_format }} {{ img.file_size }}B · exif {{ img.exif_orientation }} · {{ img.megapixels }}MP · {{ img.original_filename }}</td></tr>
+<tr><th>detect</th><td>area {{ img.area_ratio }} · angle {{ img.detected_angle }} · second {{ img.second_contour_ratio }} · quad {{ img.quad_confidence }}</td></tr>
+<tr><th>orientation</th><td>method {{ img.orientation_method|default:"—" }} · rotation {{ img.rotation_applied }}° · osd conf {{ img.osd_confidence|default:"—" }}</td></tr>
+<tr><th>align</th><td>method {{ img.align_method|default:"—" }} · skew {{ img.skew_angle }}° · deskew {{ img.deskew_applied }}°{% if img.align_method %} · thresholds: fix at ≥ 0.3°, never above 15°{% endif %}</td></tr>
+<tr><th>output</th><td>{{ img.out_w }}×{{ img.out_h }} · {{ img.out_jpeg_bytes }}B · fallback {{ img.fallback_used|default:"—" }}</td></tr>
+<tr><th>resources</th><td>RSS Δ {{ img.rss_delta }}B · alloc peak {{ img.alloc_peak }}B · thread {{ img.thread_id }}</td></tr>
+<tr><th>warnings</th><td>{{ img.warnings|default:"—" }} {{ img.exception }}</td></tr>
+</tbody></table></div></div>
+<div class="card"><h3>📋 Steps taken</h3>{% for s in img.steps %}
+<div class="row" style="padding:2px 0"><span class="muted" style="font-size:12px">{{ s }}</span></div>{% empty %}<p class="muted">no step log recorded for this image (processed before logging was added — re-run to see each step with its threshold).</p>{% endfor %}</div>
+<div class="card"><h3>🔤 OCR logs ({{ ocrs|length }})</h3>{% for o in ocrs %}
+<div class="row"><span class="badge">{{ o.reason }}</span><span class="muted">rotate {{ o.osd_rotate }} · conf {{ o.osd_confidence }} · words {{ o.word_count }} · mean {{ o.mean_conf }}</span>
+<a class="btn ghost sm" href="/ocr/{{ o.id }}/">detail</a></div><pre class="log">{{ o.full_text|truncatechars:800 }}</pre>{% empty %}<p class="muted">no OCR for this image (mode OFF, tesseract missing, or FALLBACK gated off / not ambiguous).</p>{% endfor %}</div>
+<a class="btn ghost sm" href="/runs/{{ r.id }}/">← back to run</a>{% endblock %}

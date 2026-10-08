@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}Run {{ r.id }} — SlotLab{% endblock %}{% block body %}
+<h1>Run {{ r.id }} <span class="statuspill {{ r.final_status }}">{{ r.final_status }}</span>
+<span class="muted" style="font-size:14px">{{ r.session.name }} · {{ r.images_total }} images → {{ r.pages }} pages</span></h1>
+
+<div class="card"><h3>⏱ Time taken</h3>
+<div class="statgrid">
+<div class="stat"><div class="v">{{ timing.total }}</div><div class="k">session total (wall clock)</div></div>
+<div class="stat"><div class="v">{{ timing.images }}</div><div class="k">all images summed ({{ r.workers }} workers in parallel)</div></div>
+<div class="stat"><div class="v">{{ timing.pdf }}</div><div class="k">PDF build{% if r.process_only %} (skipped: process_only){% endif %}</div></div>
+<div class="stat"><div class="v">{{ timing.per_image }}</div><div class="k">avg per image</div></div></div>
+<div class="muted">queue wait {{ timing.queue }} · backend {{ r.backend }} ×{{ r.workers }} · ocr {{ r.ocr_mode }} · <a href="/s/{{ r.session_id }}/">← back to session</a></div></div>
+
+<div class="card"><h3>🖼 Time per image</h3>
+<div class="tablewrap"><table><thead><tr><th>#</th><th>slot</th><th>time</th><th>status</th><th></th></tr></thead><tbody>
+{% for i in imgs %}<tr><td class="muted">{{ forloop.counter }}</td><td><b>{{ i.slot_label }}</b> <span class="muted">{{ i.slot_group }}</span></td>
+<td><b>{{ i.total_ms|floatformat:0 }}ms</b></td>
+<td>{% if i.status == 'OK' %}<span class="badge ok">OK</span>{% elif i.status == 'WARN' %}<span class="badge warn">WARN</span>{% else %}<span class="badge err">FAILED</span>{% endif %}</td>
+<td><a class="btn ghost sm" href="/runs/{{ r.id }}/image/{{ i.id }}/">detail</a></td></tr>{% endfor %}</tbody></table></div></div>
+
+<details class="adv"><summary>Advanced: per-stage breakdown, snapshot, resources</summary>
+<div class="card">stages (summed over images): <code>{{ r.stage_ms }}</code><br>
+settings: <code>{{ r.settings_snapshot }}</code><br>
+pdf {{ r.pdf_bytes }}B · peak RSS {{ r.peak_rss }}B · cpu user {{ r.cpu_user|floatformat:2 }}s sys {{ r.cpu_sys|floatformat:2 }}s</div></details>
+{% endblock %}

@@ -1,0 +1,178 @@
+{% extends "base.html" %}{% block title %}Session — SlotLab{% endblock %}{% block body %}
+<div class="row" style="justify-content:space-between">
+<div><h1 id="t" style="margin:0">Session…</h1><div class="muted" id="sub"></div></div>
+<div class="row"><span id="st"></span><span id="stale"></span><span id="pdf"></span></div></div>
+
+<div class="card"><h3>1 · OCR</h3>
+<div class="row" id="ocrBtns">
+<button class="ghost sm" data-m="OFF" onclick="setOcr('OFF')">OCR Off</button>
+<button class="ghost sm" data-m="FALLBACK" onclick="setOcr('FALLBACK')">OCR Fallback</button>
+<button class="ghost sm" data-m="ALWAYS" onclick="setOcr('ALWAYS')">OCR On</button>
+<span class="muted">Off = never · Fallback = only when direction is unclear{% if not slotlab.ocr_fallback %} (env toggle is OFF, so Fallback = Off){% endif %} · On = always (slower){% if not slotlab.ocr_available %} · tesseract missing, all modes behave as Off{% endif %}</span></div></div>
+
+<div class="card"><h3>2 · Run</h3>
+<div class="row">
+<button id="btnProcess" onclick="runProcess()">⚙ Process Images</button>
+<button id="btnPdf" class="ghost" onclick="runPdf()">📄 Create PDF</button>
+<button id="btnBoth" onclick="runBoth()">⚡ Process + Create PDF</button></div>
+<div class="muted" style="margin-top:6px">Process Images = measure each image, no PDF · Create PDF = build PDF from the last process (fast) · both together in one click.</div>
+<div id="result"></div>
+<div class="row" style="margin-top:10px"><span class="muted" id="progTxt">idle</span>
+<div class="pbar" style="flex:1"><i id="progBar"></i></div></div>
+<pre id="plog" class="log" style="display:none"></pre></div>
+
+<div class="card"><h3>3 · Fill with test images</h3>
+<div class="row" style="margin-bottom:8px">
+<button class="ghost sm" onclick="mixPreset('clean')">Clean only</button>
+<button class="ghost sm" onclick="mixPreset('mixed')">Mixed photos</button>
+<button class="ghost sm" onclick="mixPreset('rotation')">Rotation test</button>
+<button class="ghost sm" onclick="mixPreset('reject')">Rejection test</button>
+<label class="f">Seed <input id="seed" size="5" value="1" onchange="updPreview()"></label>
+<button onclick="fillSyn()">Fill empty slots</button>
+<span class="muted">total <b id="mixTotal">100</b>%</span></div>
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+{% for sc in scenarios %}<label class="f" style="font-weight:400">{{ sc.label }}{% if sc.rejects %} ⚠{% endif %}
+<input type="number" min="0" max="100" value="0" data-sc="{{ sc.key }}" data-reject="{{ sc.rejects|yesno:'1,0' }}" oninput="mixTotal()" style="width:64px"></label>{% endfor %}</div>
+<div class="muted">Numbers = chance (%) of each image type. ⚠ types fail upload on purpose, to test validation.</div>
+<div class="row" style="margin-top:10px;align-items:flex-start">
+<img id="pvImg" alt="test image preview" style="max-width:280px;max-height:200px;border:1px solid var(--line);border-radius:8px;background:#f1f4f9;display:none">
+<div><div class="row"><label class="f">Preview <select id="pvSc" onchange="updPreview()">
+<option value="__mix__">🎲 Mix (as configured)</option>
+{% for sc in scenarios %}<option value="{{ sc.key }}">{{ sc.label }}</option>{% endfor %}
+</select></label></div>
+<div class="muted" id="pvCap">—</div>
+<div class="muted" style="font-size:12px">Live preview of the test image — tweak the % mix / seed and see it here before filling.</div></div></div></div>
+
+<div class="card"><h3>🗂 Slots</h3>
+<div class="row">
+<button class="ghost sm" onclick="addOne()" title="Add one slot">➕</button>
+<input id="slotN" type="number" min="1" max="500" value="10" style="width:76px" title="How many slots to add">
+<button class="ghost sm" onclick="addN()">Add slots</button>
+<input id="q" placeholder="🔍 filter…" size="12" oninput="renderSlots()">
+<button class="danger sm" onclick="clearEmpty()">Remove empty</button>
+<button class="ghost sm" onclick="reload()">↻</button></div>
+<div class="dropzone" id="dz" style="margin-top:10px">📥 Drop images here (or <input type="file" id="dzFiles" multiple accept="image/*" style="display:inline">)
+<div class="row" style="justify-content:center;margin-top:6px"><button class="sm" onclick="bulkUp()">Upload to empty slots</button></div></div>
+<div class="statgrid" id="slotStats"></div>
+<div id="slotGroups"></div></div>
+
+<div class="card"><h3>🕘 Past runs</h3><div id="runs" class="muted">—</div></div>
+<script>
+const SID="{{ s.id }}";
+let CACHE=null, POLLT=null, LAST_RUN=null;
+async function api(u,m,b){const o={method:m||'GET'};if(b){o.headers={'Content-Type':'application/json'};o.body=JSON.stringify(b)}const r=await fetch(u,o);return r.json()}
+async function reload(){const r=await api('/api/sessions/'+SID+'/');if(!r.ok){toast(r.error||'load failed','err');return}const d=r.data;CACHE=d;
+document.getElementById('t').textContent='📄 '+d.name;
+document.querySelectorAll('#ocrBtns button').forEach(b=>{b.classList.toggle('ghost',b.dataset.m!==d.ocr_mode)});
+const filled=d.slots.filter(s=>s.url).length;
+document.getElementById('sub').textContent=`${d.slots.length} slots · ${filled} filled`;
+document.getElementById('st').innerHTML=`<span class="statuspill ${d.final_status}">${d.final_status}</span>`+(d.final_error?` <span class="badge err">${d.final_error}</span>`:'');
+document.getElementById('stale').innerHTML=d.is_stale?'<span class="badge stale">⚠ slots changed since PDF — run again</span>':'';
+document.getElementById('pdf').innerHTML=d.pdf_url?`<a class="btn ghost sm" href="${d.pdf_url}" target="_blank">⬇ PDF · ${fmtB(d.pdf_size)} · ${d.pages}p</a>`:'<span class="muted">no PDF yet</span>';
+renderSlots();renderRuns(d);showResult(d);
+const busy=d.final_status==='PROCESSING';
+['btnProcess','btnPdf','btnBoth'].forEach(id=>{document.getElementById(id).disabled=busy});
+document.getElementById('btnBoth').innerHTML=busy?'<span class="spin"></span> Working…':'⚡ Process + Create PDF';
+if(busy)startPoll();else{stopPoll();
+document.getElementById('progBar').style.width=d.pdf_url?'100%':'0';
+document.getElementById('progTxt').textContent=d.pdf_url?`ready · ${d.pages} pages · ${fmtB(d.pdf_size)}`:'idle'}}
+function fmtB(n){if(!n)return'0B';if(n>1e6)return(n/1e6).toFixed(1)+'MB';if(n>1e3)return(n/1e3).toFixed(0)+'KB';return n+'B'}
+function fmtT(ms){if(ms==null)return'—';if(ms<1000)return Math.round(ms)+'ms';const s=ms/1000;return s<60?s.toFixed(1)+'s':Math.floor(s/60)+'m '+String(Math.floor(s%60)).padStart(2,'0')+'s'}
+function showResult(d){const box=document.getElementById('result');
+if(!d.runs.length||d.final_status==='PROCESSING'){if(d.final_status!=='PROCESSING')box.innerHTML='';return}
+const r=d.runs[0];const n=r.images[0]||1;const avg=r.images_ms?fmtT(r.images_ms/n):'—';
+box.innerHTML=`<div class="statgrid" style="margin:10px 0 0">
+<div class="stat"><div class="v">${fmtT(r.total_ms)}</div><div class="k">total time</div></div>
+<div class="stat"><div class="v">${fmtT(r.images_ms)}</div><div class="k">all ${n} images</div></div>
+<div class="stat"><div class="v">${avg}</div><div class="k">single image (avg)</div></div>
+<div class="stat"><div class="v">${r.pdf_ms?fmtT(r.pdf_ms):'—'}</div><div class="k">PDF build${r.pages?` · ${r.pages}p`:''}</div></div></div>
+<div><a href="/runs/${r.id}/">run ${r.id} details →</a></div>`}
+function renderSlots(){const d=CACHE;if(!d)return;const q=(document.getElementById('q').value||'').toLowerCase();
+const slots=d.slots.filter(s=>!q||s.label.toLowerCase().includes(q)||s.group.toLowerCase().includes(q));
+const filled=d.slots.filter(s=>s.url).length, failed=d.slots.filter(s=>s.upload_status==='FAILED').length;
+document.getElementById('slotStats').innerHTML=
+`<div class="stat"><div class="v">${d.slots.length}</div><div class="k">slots</div></div>
+<div class="stat"><div class="v">${filled}</div><div class="k">filled</div></div>
+<div class="stat"><div class="v">${d.slots.length-filled}</div><div class="k">empty</div></div>
+<div class="stat"><div class="v">${failed}</div><div class="k">failed</div></div>`;
+const groups={};slots.forEach(s=>{(groups[s.group]=groups[s.group]||[]).push(s)});
+const host=document.getElementById('slotGroups');host.innerHTML='';
+Object.keys(groups).sort().forEach(g=>{const sec=document.createElement('div');
+sec.innerHTML=`<div class="grouphead"><h4>${g}</h4><span class="badge">${groups[g].length}</span><div class="line"></div></div>`;
+const grid=document.createElement('div');grid.className='grid';
+groups[g].forEach(s=>{const el=document.createElement('div');
+el.className='slot '+(s.upload_status==='FAILED'?'failed':(s.url?'filled':'empty'));
+el.innerHTML=`<div><b>${s.label}</b> <span class="meta">${s.layout} · ${s.required?'req':'opt'}${s.w?` · ${s.w}×${s.h}`:''}</span></div>`+
+(s.url?`<a href="${s.url}" target="_blank"><img src="${s.url}" loading="lazy"></a>`:'<div class="emptybox">empty</div>')+
+(s.upload_status==='FAILED'?`<span class="badge err">${s.upload_error}</span>`:'')+
+`<div class="tools"><label class="btn ghost sm">📤 <input type="file" accept="image/*" style="display:none" onchange="upFile(${s.id},this)">pick</label>
+<button class="ghost sm" onclick="mv(${s.id},-1)">↑</button><button class="ghost sm" onclick="mv(${s.id},1)">↓</button>
+<button class="ghost sm" onclick="clr(${s.id})">clear</button><button class="danger sm" onclick="del(${s.id})">✕</button></div>`;
+grid.appendChild(el)});sec.appendChild(grid);host.appendChild(sec)});
+if(!slots.length)host.innerHTML='<p class="muted">No slots yet — add some above.</p>'}
+function renderRuns(d){document.getElementById('runs').innerHTML=d.runs.map(r=>
+`<div class="row" style="padding:4px 0"><a href="/runs/${r.id}/"><b>run ${r.id}</b></a>
+<span class="statuspill ${r.status}" style="font-size:11px">${r.status}</span>
+<span class="muted">total ${fmtT(r.total_ms)} · images ${fmtT(r.images_ms)} · single ~${r.images[0]?fmtT((r.images_ms||0)/r.images[0]):'—'} · pdf ${r.pdf_ms?fmtT(r.pdf_ms):'—'}</span></div>`).join('')||'no runs yet'}
+function startPoll(){stopPoll();POLLT=setInterval(pollTick,1000)}
+function stopPoll(){if(POLLT){clearInterval(POLLT);POLLT=null}}
+function paintLog(p){const el=document.getElementById('plog');const tail=(p&&p.tail)||[];
+if(!tail.length){el.style.display='none';return}
+el.style.display='block';el.textContent=tail.slice(-120).join('\n');el.scrollTop=el.scrollHeight}
+async function pollTick(){const r=await api('/api/sessions/'+SID+'/');if(!r.ok)return;const d=r.data;
+if(d.runs.length){const rid=d.runs[0].id;const g=await api('/api/runs/'+rid+'/');
+if(g.ok&&g.data.progress&&g.data.progress.total){const p=g.data.progress;
+document.getElementById('progBar').style.width=Math.round(100*p.done/Math.max(1,p.total))+'%';
+document.getElementById('progTxt').textContent=`${p.done}/${p.total} images…`;paintLog(p)}}
+if(d.final_status!=='PROCESSING')reload()}
+async function setOcr(m){const r=await api('/api/sessions/'+SID+'/','PATCH',{ocr_mode:m});r.ok?reload():toast(r.error,'err')}
+async function addOne(){const r=await api('/api/sessions/'+SID+'/slots/','POST',{});r.ok?(toast('slot added','ok'),reload()):toast(r.error,'err')}
+async function addN(){let n=Math.floor(+document.getElementById('slotN').value||0);if(n<1)return toast('enter how many slots (1–500)','err');n=Math.min(500,n);const r=await api('/api/sessions/'+SID+'/slots/','POST',{bulk:{count:n,prefix:'DOC',group:'General',layout:'single'}});r.ok?(toast(n+' slots added','ok'),reload()):toast(r.error,'err')}
+async function del(id){if(!confirm('Delete this slot?'))return;await api('/api/slots/'+id+'/','DELETE');reload()}
+async function clr(id){await api('/api/slots/'+id+'/','PATCH',{clear:true});reload()}
+async function mv(id,d){await api('/api/slots/'+id+'/','POST',{action:'move',delta:d});reload()}
+async function upFile(id,inp){if(!inp.files[0])return;const f=new FormData();f.append('file',inp.files[0]);
+const r=await(await fetch('/api/slots/'+id+'/upload/',{method:'POST',body:f})).json();
+r.ok?toast('uploaded','ok'):toast(r.error||'upload failed','err');reload()}
+async function bulkUp(){const files=document.getElementById('dzFiles').files;if(!files.length)return toast('pick files first','err');
+const f=new FormData();for(const x of files)f.append('files',x);
+const r=await(await fetch('/api/sessions/'+SID+'/upload-bulk/',{method:'POST',body:f})).json();
+if(!r.ok)toast(r.error,'err');else{toast(`assigned ${r.data.assigned}/${files.length}`,'ok');
+if(r.data.errors&&r.data.errors.length)toast('rejected: '+r.data.errors.slice(0,3).map(e=>e.slot+': '+e.error).join(' | '),'err')}reload()}
+function mixParts(){const p=[];document.querySelectorAll('[data-sc]').forEach(i=>{const v=+i.value||0;if(v>0)p.push(i.dataset.sc+'='+v)});return p}
+function mixTotal(){const t=[...document.querySelectorAll('[data-sc]')].reduce((a,i)=>a+(+i.value||0),0);document.getElementById('mixTotal').textContent=t;
+const pv=document.getElementById('pvSc');if(pv&&pv.value==='__mix__')updPreview();return t}
+async function updPreview(){const pv=document.getElementById('pvSc');if(!pv)return;
+const sc=pv.value,seed=+document.getElementById('seed').value||1;
+const mix=mixParts().join(',')||'clean_scan=100';
+const cap=document.getElementById('pvCap'),img=document.getElementById('pvImg');
+try{const r=await fetch('/api/preview-synthetic/?scenario='+encodeURIComponent(sc)+'&seed='+seed+'&mix='+encodeURIComponent(mix)+'&title=PREVIEW');
+if(!r.ok){img.style.display='none';cap.textContent='no preview ('+(await r.json()).error+')';return}
+const b=await r.blob();if(img.src&&img.src.startsWith('blob:'))URL.revokeObjectURL(img.src);
+img.src=URL.createObjectURL(b);img.style.display='block';
+cap.textContent=(r.headers.get('X-Scenario')||sc)+' · seed '+seed+' · '+(b.size>1e6?(b.size/1e6).toFixed(1)+'MB':Math.round(b.size/1e3)+'KB');}catch(e){cap.textContent='preview failed'}}
+function mixPreset(name){const P={clean:{clean_scan:100},mixed:{clean_scan:60,photo_dark_bg:25,sideways_90:15},
+rotation:{sideways_90:40,upside_down_180:30,perspective:30},reject:{clean_scan:20,blurry:30,low_res:25,two_objects:15,corrupt_file:10}};
+const m=P[name]||{};document.querySelectorAll('[data-sc]').forEach(i=>{i.value=m[i.dataset.sc]||0});mixTotal()}
+async function fillSyn(){const parts=mixParts();if(!parts.length)return toast('set at least one image type above 0','err');
+const r=await api('/api/sessions/'+SID+'/fill-synthetic/','POST',{mix:parts.join(','),seed:+document.getElementById('seed').value});
+if(!r.ok)toast(r.error,'err');else{toast(`filled ${r.data.filled}/${r.data.total}`,'ok');
+if(r.data.rejected.length)toast('rejected: '+r.data.rejected.slice(0,3).map(e=>e.slot+' ('+e.scenario+'): '+e.error).join(' | '),'err')}reload()}
+async function runProcess(){const r=await api('/api/sessions/'+SID+'/generate/','POST',{process_only:true});
+if(!r.ok){toast(r.error,'err');return}toast('processing images…','ok');reload()}
+async function runPdf(){const r=await api('/api/sessions/'+SID+'/create-pdf/','POST',{});
+if(!r.ok){toast(r.error,'err');return}toast('building PDF…','ok');reload()}
+async function runBoth(){const r=await api('/api/sessions/'+SID+'/generate/','POST',{});
+if(!r.ok){toast(r.error,'err');return}toast('processing + PDF…','ok');reload()}
+async function clearEmpty(){const d=CACHE;const n=d.slots.filter(s=>!s.url).length;if(!n)return toast('no empty slots','err');
+if(!confirm(`Remove all ${n} empty slots?`))return;
+for(const s of d.slots){if(!s.url)await api('/api/slots/'+s.id+'/','DELETE')}toast(n+' empty slots removed','ok');reload()}
+const dz=document.getElementById('dz');
+['dragover','dragenter'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add('over')}));
+['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.remove('over')}));
+dz.addEventListener('drop',ev=>{const dt=ev.dataTransfer;if(!dt||!dt.files.length)return;
+document.getElementById('dzFiles').files=dt.files;toast(dt.files.length+' file(s) ready — click Upload','ok')});
+mixPreset('mixed');
+reload();
+updPreview();
+</script>{% endblock %}

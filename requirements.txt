@@ -1,0 +1,13 @@
+Django>=5.2,<6
+opencv-python-headless>=4.8
+Pillow>=10
+numpy>=1.26
+img2pdf>=0.5
+reportlab>=4
+pypdf>=4
+python-magic>=0.4
+psutil>=5.9
+pytesseract>=0.3
+pytest>=8
+pytest-django>=4.8
+filetype>=1.2

@@ -1,0 +1,98 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}SlotLab{% endblock %}</title><style>
+:root{--bg:#f4f6fb;--card:#ffffff;--ink:#1b2434;--muted:#667085;--line:#e3e8f2;
+--brand:#2b5fb8;--brand-d:#1f4a94;--ok:#157f3d;--okbg:#d9f2e2;--warn:#8a5a00;--warnbg:#ffefc2;
+--err:#b42318;--errbg:#ffdcd6;--info:#175cd3;--infobg:#e0ebff;--radius:12px;
+--shadow:0 1px 2px rgba(16,24,40,.06),0 4px 14px rgba(16,24,40,.06)}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink);line-height:1.45}
+header.top{position:sticky;top:0;z-index:50;background:#141d2e;color:#fff;padding:10px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.brand{font-weight:800;font-size:18px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.brand .cube{display:inline-flex;width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#5b8def,#2b5fb8);align-items:center;justify-content:center;font-size:15px}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
+nav.tabs a{color:#c9d6f2;text-decoration:none;padding:6px 12px;border-radius:8px;font-size:13.5px;font-weight:600}
+nav.tabs a:hover{background:rgba(255,255,255,.1);color:#fff}
+nav.tabs a.active{background:var(--brand);color:#fff}
+.hbadges{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:#e7ecf5;color:#33415c;white-space:nowrap}
+.badge.ok{background:var(--okbg);color:var(--ok)}
+.badge.warn{background:var(--warnbg);color:var(--warn)}
+.badge.err{background:var(--errbg);color:var(--err)}
+.badge.info{background:var(--infobg);color:var(--info)}
+.badge.stale{background:var(--warnbg);color:var(--warn);border:1px dashed var(--warn)}
+.badge.dark{background:rgba(255,255,255,.14);color:#e8eefc}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+main{padding:22px;max-width:1240px;margin:auto}
+h1,h2{margin:.2em 0 .6em}h1{font-size:24px}h2{font-size:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:14px 0;box-shadow:var(--shadow)}
+.card h3{margin:.1em 0 .7em;font-size:15px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:#fff;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;min-width:640px}
+th,td{padding:8px 10px;text-align:left;vertical-align:middle;border-bottom:1px solid var(--line)}
+thead th{background:#eef2fa;position:sticky;top:0;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:#475569}
+tbody tr:nth-child(even){background:#fafbfe}
+tbody tr:hover{background:#f0f5ff}
+button,.btn{background:var(--brand);color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+button:hover,.btn:hover{background:var(--brand-d)}
+button:disabled{opacity:.55;cursor:wait}
+button.ghost,.btn.ghost{background:#eef2fa;color:var(--brand)}
+button.ghost:hover,.btn.ghost:hover{background:#dde7f8}
+button.danger,.btn.danger{background:#fff;color:var(--err);border:1px solid #f0b8b0}
+button.danger:hover,.btn.danger{background:var(--errbg)}
+button.sm{padding:5px 9px;font-size:12px;border-radius:7px}
+input,select{padding:8px 10px;border:1px solid #c6cede;border-radius:8px;font-size:13px;background:#fff;color:var(--ink)}
+input:focus,select:focus{outline:2px solid #b9cdf3;border-color:var(--brand)}
+label.f{display:flex;align-items:center;gap:6px;font-size:13px;color:#344054;font-weight:600}
+.muted{color:var(--muted)}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.slot{border:1px solid var(--line);border-radius:var(--radius);padding:10px;background:#fff;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px}
+.slot.filled{border-left:4px solid var(--ok)}.slot.empty{border-left:4px solid #cbd5e1}.slot.failed{border-left:4px solid var(--err)}
+.slot .meta{font-size:12px;color:var(--muted)}
+.slot img{width:100%;max-height:150px;object-fit:contain;background:#f1f4f9;border-radius:8px;display:block}
+.slot .emptybox{height:90px;display:flex;align-items:center;justify-content:center;background:#f1f4f9;border:1px dashed #cbd5e1;border-radius:8px;color:var(--muted);font-size:13px}
+.slot .tools{display:flex;gap:4px;flex-wrap:wrap;margin-top:auto}
+.grouphead{display:flex;align-items:center;gap:10px;margin:18px 0 8px}
+.grouphead h4{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:#475569}
+.grouphead .line{flex:1;height:1px;background:var(--line)}
+.pbar{height:10px;background:#e6ebf5;border-radius:999px;overflow:hidden;min-width:140px}
+.pbar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#5b8def,#2b5fb8);transition:width .4s}
+.statuspill{font-size:13px;font-weight:700;padding:4px 12px;border-radius:999px}
+.statuspill.NONE{background:#e7ecf5;color:#475569}.statuspill.PROCESSING{background:var(--infobg);color:var(--info)}
+.statuspill.READY{background:var(--okbg);color:var(--ok)}.statuspill.FAILED{background:var(--errbg);color:var(--err)}
+pre.log{background:#0f1728;color:#cfe3ff;padding:12px;border-radius:10px;max-height:240px;overflow:auto;font-size:12px;margin:8px 0 0}
+.bar{display:flex;height:14px;border-radius:5px;overflow:hidden;background:#e8edf5;min-width:120px}
+.bar span{display:block;height:100%}
+details.adv{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#fafbfe}
+details.adv summary{cursor:pointer;font-weight:700;font-size:13px;color:#344054}
+.dropzone{border:2px dashed #b9c6e2;border-radius:var(--radius);padding:14px;background:#fafcff;text-align:center;color:var(--muted);font-size:13px;transition:.15s}
+.dropzone.over{border-color:var(--brand);background:#eaf1ff;color:var(--brand)}
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:99;max-width:min(420px,90vw)}
+.toast{background:#141d2e;color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.3);border-left:4px solid var(--brand)}
+.toast.ok{border-color:#22c55e}.toast.err{border-color:#ef4444}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
+.stat{background:#f8fafd;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.stat .v{font-size:20px;font-weight:800}.stat .k{font-size:12px;color:var(--muted)}
+footer{padding:22px;color:var(--muted);font-size:12px;text-align:center}
+@media(max-width:640px){main{padding:12px}.hbadges{margin-left:0}}
+</style></head><body>
+<header class="top">
+<span class="brand"><span class="cube">▦</span> SlotLab</span>
+<nav class="tabs">
+<a href="/" class="{% if request.path == '/' %}active{% endif %}">Sessions</a><a href="/analysis/" class="{% if request.path|slice:':9' == '/analysis' %}active{% endif %}">Analysis</a><a href="/ocr/" class="{% if request.path|slice:':5' == '/ocr/' %}active{% endif %}">OCR logs</a><a href="/settings/" class="{% if request.path|slice:':10' == '/settings/' %}active{% endif %}">Settings</a></nav>
+<span class="hbadges">
+<span class="badge dark" title="Generation backend"><span class="dot"></span>{{ slotlab.backend }} ×{{ slotlab.workers }}</span>
+{% if slotlab.ocr_available %}<span class="badge ok" title="Tesseract {{ slotlab.tesseract }}; langs {{ slotlab.ocr_langs }}">OCR ✓ {{ slotlab.tesseract }}</span>
+{% else %}<span class="badge warn" title="Install tesseract-ocr to enable OSD/text OCR">OCR unavailable</span>{% endif %}
+{% if slotlab.ocr_fallback %}<span class="badge dark" title="OCR_FALLBACK_ENABLED=true — FALLBACK sessions may call OSD">fallback ON</span>
+{% else %}<span class="badge warn" title="OCR_FALLBACK_ENABLED=false — FALLBACK behaves like OFF">fallback OFF</span>{% endif %}
+</span></header>
+<main>{% block body %}{% endblock %}</main>
+<footer>SlotLab PoC · synthetic data only · no external calls · <a href="/settings/">effective config</a></footer>
+<div id="toasts"></div>
+<script>
+function toast(msg,kind){const t=document.createElement('div');t.className='toast '+(kind||'');t.textContent=msg;document.getElementById('toasts').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';setTimeout(()=>t.remove(),400)},4200)}
+</script>
+{% block scripts %}{% endblock %}
+</body></html>

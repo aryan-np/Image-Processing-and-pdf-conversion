@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}OCR logs — SlotLab{% endblock %}{% block body %}
+<h1>OCR logs</h1>
+<p class="muted">One row per OCR invocation. FALLBACK rows appear only for ambiguous-orientation images — and only when <code>OCR_FALLBACK_ENABLED=true</code> and tesseract is installed.</p>
+<div class="card"><form class="row"><input name="slot" placeholder="filter slot…" value="{{ request.GET.slot }}">
+<select name="reason"><option value="">any reason</option><option>FALLBACK</option><option>ALWAYS</option></select>
+<button class="ghost">Filter</button></form></div>
+<div class="tablewrap"><table><thead><tr><th>id</th><th>slot</th><th>reason</th><th>rotate</th><th>conf</th><th>words</th><th>ms</th><th></th></tr></thead><tbody>
+{% for o in logs %}<tr><td>{{ o.id }}</td><td><b>{{ o.slot_label }}</b></td><td><span class="badge">{{ o.reason }}</span></td><td>{{ o.osd_rotate }}</td>
+<td>{{ o.osd_confidence }}</td><td>{{ o.word_count }}</td><td>{{ o.duration_ms|floatformat:0 }}</td>
+<td><a class="btn ghost sm" href="/ocr/{{ o.id }}/">detail</a></td></tr>
+{% empty %}<tr><td colspan="8" class="muted">No OCR rows — expected with ocr OFF, missing tesseract, or FALLBACK gated off.</td></tr>{% endfor %}</tbody></table></div>{% endblock %}

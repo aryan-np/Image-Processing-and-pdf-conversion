@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}Settings — SlotLab{% endblock %}{% block body %}
+<h1>Settings</h1>
+<p class="muted">Every setting comes from an environment variable (<code>.env.example</code>). Change the value, restart the server.</p>
+{% for sec in sections %}
+<div class="card"><h3>{{ sec.heading }}</h3>
+<p class="muted">{{ sec.blurb }}</p>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Value</th><th>Details</th></tr></thead><tbody>
+{% for label,key,value,hint in sec.rows %}<tr>
+<td><b>{{ label }}</b><br><span class="muted"><code>{{ key }}</code></span></td>
+<td>{% if value is True %}<span class="badge ok">on</span>{% elif value is False %}<span class="badge warn">off</span>{% else %}<code>{{ value }}</code>{% endif %}</td>
+<td class="muted">{{ hint }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endfor %}
+{% endblock %}

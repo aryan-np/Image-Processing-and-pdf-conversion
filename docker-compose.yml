@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DEBUG: "True"
+      GEN_BACKEND: thread
+      SQLITE_PATH: /data/db.sqlite3
+    volumes:
+      - slotlab-data:/data
+      - ./media:/app/media
+      - ./logs:/app/logs
+
+volumes:
+  slotlab-data:
