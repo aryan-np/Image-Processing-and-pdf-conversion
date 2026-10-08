@@ -223,3 +223,26 @@ def test_workspace_preview_ui():
     s = Session.objects.create(name="W", ocr_mode="OFF")
     html = Client().get(f"/s/{s.id}/").content.decode()
     assert "pvLink" in html and "fillThis" in html and "Fill with this" in html
+
+@pytest.mark.django_db
+def test_run_detail_compare(settings):
+    """Run detail shows original vs processed comparison with fullscreen lightbox."""
+    settings.GEN_BACKEND = "sync"
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    s = Session.objects.create(name="C", ocr_mode="OFF")
+    for i, sc in enumerate(["clean_scan", "photo_dark_bg"]):
+        slot = Slot.objects.create(session=s, label=f"D{i}", group="G", order=i,
+                                   layout="single", required=True)
+        data, _ = generate(sc, seed=21 + i, title=slot.label)
+        c = Client()
+        c.post(f"/api/slots/{slot.id}/upload/",
+               {"file": SimpleUploadedFile("a.jpg", data, "image/jpeg")})
+    c = Client()
+    rid = c.post(f"/api/sessions/{s.id}/generate/",
+                 data=json.dumps({"process_only": True}),
+                 content_type="application/json").json()["data"]["run_id"]
+    html = c.get(f"/runs/{rid}/").content.decode()
+    assert "Original vs processed" in html and "openLb" in html
+    # 2 originals + 2 processed-from-this-run previews
+    assert html.count("data-cap=") == 4
+    assert "_process_cache" in html

@@ -37,7 +37,27 @@ def run_detail(request, rid):
     timing = {"total": fmt_ms(r.total_ms), "images": fmt_ms(r.images_ms),
               "pdf": fmt_ms(r.pdf_ms), "queue": fmt_ms(r.queue_wait_ms),
               "per_image": fmt_ms(r.images_ms / n)}
-    return render(request, "run_detail.html", {"r": r, "imgs": imgs, "timing": timing})
+    # original vs processed comparison: originals from current slot files,
+    # processed from this run's process cache (only when it is this run's own).
+    from .storage import storage
+    slot_by_order = {s.order: s for s in r.session.slots.all()}
+    manifest, _ = storage.load_process_cache(r.session_id)
+    proc_by_order = {}
+    if manifest and manifest.get("run_id") == r.id:
+        for it in manifest.get("items", []):
+            proc_by_order[it["order"]] = "/media/_process_cache/%s/%s" % (
+                r.session_id, it["file"])
+    compare = []
+    for img in imgs:
+        slot = slot_by_order.get(img.slot_order)
+        orig = ""
+        if slot and slot.media_path and storage.exists(slot.media_path):
+            orig = "/media/" + slot.media_path
+        compare.append({"label": img.slot_label, "group": img.slot_group,
+                        "status": img.status, "orig": orig,
+                        "proc": proc_by_order.get(img.slot_order, "")})
+    return render(request, "run_detail.html",
+                  {"r": r, "imgs": imgs, "timing": timing, "compare": compare})
 
 def image_detail(request, rid, iid):
     r = get_object_or_404(GenerationRun, pk=rid)

@@ -10,6 +10,34 @@
 <div class="stat"><div class="v">{{ timing.per_image }}</div><div class="k">avg per image</div></div></div>
 <div class="muted">queue wait {{ timing.queue }} · backend {{ r.backend }} ×{{ r.workers }} · ocr {{ r.ocr_mode }} · <a href="/s/{{ r.session_id }}/">← back to session</a></div></div>
 
+<div class="card"><h3>🔍 Original vs processed — click any image for fullscreen</h3>
+<div class="grid" id="cmpGrid" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
+{% for c in compare %}<div class="slot">
+<div><b>{{ c.label }}</b> <span class="meta">{{ c.group }}</span>
+{% if c.status == 'OK' %}<span class="badge ok">OK</span>{% elif c.status == 'WARN' %}<span class="badge warn">WARN</span>{% else %}<span class="badge err">FAILED</span>{% endif %}</div>
+<div class="row" style="align-items:flex-start">
+<div style="flex:1;min-width:0">{% if c.orig %}<img src="{{ c.orig }}" loading="lazy" data-full="{{ c.orig }}" data-cap="{{ c.label }} · original" onclick="openLb(this)" style="cursor:zoom-in">{% else %}<div class="emptybox">no original</div>{% endif %}<div class="meta">original</div></div>
+<div style="flex:1;min-width:0">{% if c.proc %}<img src="{{ c.proc }}" loading="lazy" data-full="{{ c.proc }}" data-cap="{{ c.label }} · processed" onclick="openLb(this)" style="cursor:zoom-in">{% else %}<div class="emptybox">no processed preview</div>{% endif %}<div class="meta">processed</div></div>
+</div></div>{% empty %}<p class="muted">no images in this run</p>{% endfor %}</div></div>
+<div id="lb" style="display:none;position:fixed;inset:0;background:rgba(8,12,24,.93);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:10px;padding:20px" onclick="if(event.target===this)lbClose()">
+<img id="lbImg" style="max-width:94vw;max-height:84vh;border-radius:10px;box-shadow:0 10px 60px rgba(0,0,0,.6)" alt="fullscreen">
+<div class="row" style="justify-content:center;align-items:center">
+<button class="ghost sm" onclick="lbNav(-1)">‹ prev</button>
+<span class="badge dark" id="lbCap"></span>
+<button class="ghost sm" onclick="lbNav(1)">next ›</button>
+<button class="danger sm" onclick="lbClose()">✕ close</button></div></div>
+<script>
+let LB=[],LBI=0;
+function openLb(el){LB=[...document.querySelectorAll('#cmpGrid img[data-full]')];LBI=Math.max(0,LB.indexOf(el));showLb()}
+function showLb(){const el=LB[LBI];if(!el)return;document.getElementById('lbImg').src=el.dataset.full;
+document.getElementById('lbCap').textContent=(el.dataset.cap||'')+` (${LBI+1}/${LB.length})`;
+document.getElementById('lb').style.display='flex'}
+function lbNav(d){if(!LB.length)return;LBI=(LBI+d+LB.length)%LB.length;showLb()}
+function lbClose(){document.getElementById('lb').style.display='none'}
+document.addEventListener('keydown',e=>{if(document.getElementById('lb').style.display!=='flex')return;
+if(e.key==='Escape')lbClose();if(e.key==='ArrowRight')lbNav(1);if(e.key==='ArrowLeft')lbNav(-1)});
+</script>
+
 <div class="card"><h3>🖼 Time per image</h3>
 <div class="tablewrap"><table><thead><tr><th>#</th><th>slot</th><th>time</th><th>status</th><th></th></tr></thead><tbody>
 {% for i in imgs %}<tr><td class="muted">{{ forloop.counter }}</td><td><b>{{ i.slot_label }}</b> <span class="muted">{{ i.slot_group }}</span></td>
