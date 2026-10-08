@@ -263,3 +263,16 @@ def test_run_banner_states_ocr_mode(settings):
                         content_type="application/json").json()["data"]["run_id"]
     tail = _progress.get(rid, {}).get("tail", [])
     assert tail and "OCR mode OFF" in tail[0], tail[:2]
+
+def test_analysis_pdf_builds(tmp_path):
+    """PoC analysis PDF regenerates with all key sections."""
+    import subprocess, sys
+    from pypdf import PdfReader
+    out = tmp_path / "analysis.pdf"
+    r = subprocess.run([sys.executable, "docs/build_analysis_pdf.py", str(out)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    text = " ".join(p.extract_text() for p in PdfReader(str(out)).pages)
+    for needle in ["JPEG q82", "rectangularity", "Original tilt", "processed tilt",
+                   "Canny", "auto-purge", "finished PDF"]:
+        assert needle in text, needle

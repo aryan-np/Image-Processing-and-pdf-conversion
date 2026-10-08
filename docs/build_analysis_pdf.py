@@ -2,6 +2,9 @@
 
 Usage: env/bin/python docs/build_analysis_pdf.py [out.pdf]
 Default output: docs/poc-analysis-server-built-pdfs.pdf
+
+All numbers below were measured 2026-10-08 by running the real pipeline
+(pipeline.process_image); the walkthrough in section 3 quotes actual log lines.
 """
 import sys
 from datetime import date
@@ -16,28 +19,22 @@ from reportlab.platypus import (BaseDocTemplate, Frame, PageTemplate, Paragraph,
 
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "poc-analysis-server-built-pdfs.pdf"
 
-# Measured 2026-10-08 on synthetic docs (seed 1) through pipeline.process_image.
-MEASURED = {
-    "clean_scan": {"orig": "1200x1600 (1.92MP, 149KB)", "out": "1200x1600 (1.92MP, 142KB)",
-                   "dpi": "137 -> 137", "path": "trim fallback", "ms": 164},
-    "photo_dark_bg": {"orig": "1700x2100 (3.57MP, 539KB)", "out": "1234x1628 (2.01MP, 339KB)",
-                      "dpi": "180 -> 139", "path": "poly warp", "ms": 99},
-}
-STAGES = [("load", "~10-15"), ("detect", "~18-25"), ("crop/deskew", "~15-30"),
-          ("orientation", "~0.1"), ("align", "~20-25"), ("enhance (CLAHE)", "~15-80"),
-          ("compose", "~4-5")]
-
 styles = getSampleStyleSheet()
-H1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=19, leading=23, spaceAfter=4)
-H2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=13, leading=16, spaceBefore=12, spaceAfter=4)
-BODY = ParagraphStyle("body", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=4)
-SMALL = ParagraphStyle("small", parent=styles["Normal"], fontSize=8.5, leading=11, textColor=colors.HexColor("#475569"))
-CELL = ParagraphStyle("cell", parent=styles["Normal"], fontSize=9, leading=12)
-CELLH = ParagraphStyle("cellh", parent=styles["Normal"], fontSize=9, leading=12, textColor=colors.white)
 TITLE = ParagraphStyle("title", parent=styles["Title"], fontSize=24, leading=28)
-SUB = ParagraphStyle("sub", parent=styles["Normal"], fontSize=11, leading=14, textColor=colors.HexColor("#475569"))
+SUB = ParagraphStyle("sub", parent=styles["Normal"], fontSize=11, leading=14,
+                     textColor=colors.HexColor("#475569"))
+H1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=17, leading=21, spaceAfter=4)
+H2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=12, leading=15, spaceBefore=10, spaceAfter=4)
+BODY = ParagraphStyle("body", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=4)
+SMALL = ParagraphStyle("small", parent=styles["Normal"], fontSize=8.5, leading=11,
+                       textColor=colors.HexColor("#475569"))
+CELL = ParagraphStyle("cell", parent=styles["Normal"], fontSize=9, leading=12)
+CELLH = ParagraphStyle("cellh", parent=styles["Normal"], fontSize=9, leading=12,
+                       textColor=colors.white)
+LOG = ParagraphStyle("log", parent=styles["Code"] if "Code" in styles else styles["Normal"],
+                     fontSize=8.5, leading=11, backColor=colors.HexColor("#0f1728"),
+                     textColor=colors.HexColor("#cfe3ff"), borderPadding=6)
 
-HDR = [colors.HexColor("#1f4a94"), colors.HexColor("#1f4a94")]
 TSTYLE = TableStyle([
     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f4a94")),
     ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -52,6 +49,7 @@ TSTYLE = TableStyle([
 
 P = lambda t: Paragraph(t, BODY)
 C = lambda t: Paragraph(t, CELL)
+L = lambda t: Paragraph(t.replace(" ", "&nbsp;"), LOG)
 
 
 def header(canvas, doc):
@@ -74,40 +72,79 @@ def build():
     story = []
     today = date.today().isoformat()
     story += [Paragraph("Server-built PDFs from phone photos", TITLE),
-              Paragraph("PoC analysis after testing: measured quality loss, risks for sensitive "
-                        "and multilingual documents, why threshold tuning is slow, and why a "
-                        "user-supplied PDF is the better architecture", SUB),
+              Paragraph("PoC analysis after testing: where quality is lost, what each threshold does "
+                        "(with measured examples), risks for sensitive and multilingual documents, "
+                        "what to improve, and the recommended architecture", SUB),
               Spacer(1, 2),
               Paragraph(f"Date: {today} · Suite: 36 passed, 1 skipped (GEN_BACKEND=sync, tesseract 5.5.0) · "
                         "Pipeline: load → detect → crop/deskew → orientation → align → enhance → compose",
                         SMALL),
               Spacer(1, 4)]
 
-    story.append(Paragraph("1. Finding — the PDF images are lower quality than the uploads", H1))
-    story.append(P("Each photo passes a chain where every step discards detail. Measured on two sample "
-                   "documents through <font face=\"Helvetica-Bold\">pipeline.process_image</font>:"))
+    story.append(Paragraph("1. Formats in, format out — and where quality is lost", H1))
+    story.append(P("Uploads accept <b>JPG, PNG and WebP</b> (HEIC only if enabled). But whatever comes in, "
+                   "the PDF is always built from <b>fresh JPEGs at quality 82</b>. So a perfect PNG upload is "
+                   "still decoded, processed, and re-compressed as lossy JPEG — that conversion alone softens "
+                   "text edges, and it happens on every single run:"))
     rows = [[Paragraph("<b>sample</b>", CELLH), Paragraph("<b>uploaded</b>", CELLH),
-             Paragraph("<b>in PDF</b>", CELLH), Paragraph("<b>eff. DPI on A4</b>", CELLH),
-             Paragraph("<b>path / time</b>", CELLH)]]
-    for k, v in MEASURED.items():
-        rows.append([C(k), C(v["orig"]), C(v["out"]), C(v["dpi"]),
-                     C(f"{v['path']}, {v['ms']}ms total")])
-    story.append(Table(rows, colWidths=[28 * mm, 42 * mm, 42 * mm, 24 * mm, 39 * mm], style=TSTYLE))
+             Paragraph("<b>stored in PDF</b>", CELLH), Paragraph("<b>eff. DPI on A4</b>", CELLH)]]
+    for r in [
+        ("clean scan (PNG in)", "1200x1600, 1.92MP, 149KB", "1200x1600 JPEG q82, 142KB", "137 → 137"),
+        ("dark-bg photo (JPG in)", "1700x2100, 3.57MP, 539KB", "1234x1628 JPEG q82, 339KB", "180 → 139"),
+    ]:
+        rows.append([C(r[0]), C(r[1]), C(r[2]), C(r[3])])
+    story.append(Table(rows, colWidths=[38 * mm, 47 * mm, 50 * mm, 40 * mm], style=TSTYLE))
     story.append(Spacer(1, 2))
     for b in [
-        "<b>2000px cap (~171 DPI max).</b> Longest side is clamped to 2000px — a 12MP phone photo "
-        "is cut to a quarter of its pixels before the PDF is built. Print/archival standard is 300 DPI.",
-        "<b>Double JPEG compression.</b> The upload is already JPEG; the pipeline decodes, processes, "
-        "and re-encodes at q82. Text edges gain ringing artifacts, compounded on every re-run.",
-        "<b>CLAHE always on.</b> Local contrast (clipLimit 2.0) evens lighting but amplifies sensor noise "
-        "and can wash out light stamps, pencil marks, and colored seals. No per-image decision.",
-        "<b>Three resampling passes.</b> Perspective warp → deskew rotate → final resize (cubic-class "
-        "filters, but triple interpolation still softens fine print, MRZ lines, seal micro-text).",
+        "<b>2000px cap (~171 DPI max).</b> Longest side is clamped to 2000px — a 12MP phone photo keeps a "
+        "quarter of its pixels. Print/archival standard is 300 DPI.",
+        "<b>Double JPEG compression.</b> JPG uploads are decoded and re-encoded; PNG/WebP uploads are "
+        "transcoded into lossy JPEG. Ringing artifacts appear around letters and re-runs compound them.",
+        "<b>CLAHE contrast is always on.</b> It evens lighting but boosts sensor noise and can bleach light "
+        "stamps, pencil notes, and colored seals. No per-image decision is made.",
+        "<b>Three resampling passes.</b> Perspective warp → deskew rotate → final resize. Good filters "
+        "(cubic-class), but interpolating three times still blurs fine print, MRZ lines, and micro-text.",
     ]:
         story.append(P("• " + b))
-    story.append(P("Verdict: output is a <i>screen-readable facsimile</i>, not a faithful archival copy."))
 
-    story.append(Paragraph("2. Finding — risks for sensitive and multilingual documents", H1))
+    story.append(Paragraph("2. What each step does — thresholds with worked examples", H1))
+    story.append(P("One real dark-background photo through the pipeline (numbers quoted from its log):"))
+    story.append(Paragraph("Step 1–2 · Load + find the page", H2))
+    story.append(P("<b>Thresholds:</b> file ≤10MB, short side ≥800px, sharpness (Laplacian variance on a 1000px "
+                   "copy) ≥100 — measured <b>sharp 921, blurry 0.4</b>, so blurry uploads are stopped here."))
+    story.append(L("detect: page covers 53.6% (warp needs 10–97%, rectangularity ≥0.90, 2nd ≤40%) · "
+                   "rectangularity 0.995 · 2nd contour 0.0"))
+    story.append(P("<b>Reading it:</b> the paper covers about half the photo — inside the 10–97% window, so a "
+                   "warp is allowed. Rectangularity 0.995 means the outline is practically a perfect rectangle "
+                   "(needs ≥0.90). Second shape 0.0 means no competing object (over 40% would mean two pages and "
+                   "reject the upload). Because all three pass, the next step may cut:"))
+    story.append(Paragraph("Step 3 · Crop — background removed", H2))
+    story.append(L("crop: 4-corner perspective warp (INTER_CUBIC, rectangularity 0.995 ≥ 0.90) · 1% edge shave + "
+                   "2% padding · background removed, only the document kept"))
+    story.append(P("<b>Reading it:</b> four corners were found on a rectangle-like shape, so the page is "
+                   "stretched back into a straight rectangle and everything outside it (dark table) is deleted. "
+                   "A 1% shave removes thin background slivers, then a 2% white margin is added so edge stamps "
+                   "survive. Photo went 1700x2100 → document-only 1234x1628. "
+                   "Counter-example — a full-frame scan covers 99.0% (outside 10–97%), so no warp is attempted: "
+                   "“No clean page edge → whitespace_trim: trimming white margins instead of warping”."))
+    story.append(Paragraph("Step 4 · Orientation — EXIF proposes, OCR validates", H2))
+    story.append(P("The phone's EXIF tag is applied first, then the page shape (portrait vs landscape "
+                   "expectation). Only if direction is still unclear does Tesseract OSD read the text — "
+                   "accepted at confidence ≥2.0, below that the image is left alone and flagged, never guessed:"))
+    story.append(L("sideways photo, FALLBACK: OCR text read (confidence 5.58) → rotated 270° (method osd_fallback)"))
+    story.append(L("upside-down photo, FALLBACK: OCR text read (confidence 6.84) → rotated 180° (method osd_fallback)"))
+    story.append(P("Without tesseract installed the log says so explicitly "
+                   "(“tesseract NOT installed — install it or rotations stay as-is”) instead of failing silently."))
+    story.append(Paragraph("Step 5 · Alignment — original tilt vs processed tilt", H2))
+    story.append(P("Text-line angle is measured (Hough lines); tilt ≥0.5° is counter-rotated (limit 45°), then "
+                   "the tilt is <b>measured again on the result</b>, so the log proves the fix:"))
+    story.append(L("align: Original tilt 6.998° (fix at ≥ 0.5°, limit 45°) → rotated 6.998° · processed tilt 0.0°"))
+    story.append(P("Level pages log “original tilt 0.0°, processed tilt 0.0° · skipping”, and the canvas is "
+                   "re-squared with uniform padding so borders never stay rotated."))
+    story.append(Paragraph("Steps 6–7 · Enhance + compose", H2))
+    story.append(P("CLAHE contrast, then longest side →2000px (never enlarged) and JPEG q82 for the A4 page."))
+
+    story.append(Paragraph("3. Risks for sensitive and multilingual documents", H1))
     rows = [[Paragraph("<b>risk</b>", CELLH), Paragraph("<b>impact</b>", CELLH),
              Paragraph("<b>status in this PoC</b>", CELLH)]]
     for r in [
@@ -116,53 +153,43 @@ def build():
         ("Silent alteration (edge stamps clipped, faint signatures bleached) becomes the record",
          "Evidentiary integrity", "2% padding heuristic only; no diff vs raw"),
         ("OSD orientation is Latin-tuned; Devanagari orients worse, lower confidence",
-         "Sideways Nepali docs abstain (2.0 gate) or mis-rotate", "Needs tesseract-ocr-nep; untested"),
-        ("Mixed-script pages (English + Nepali, e.g. citizenship) worst for OSD + OCR",
+         "Sideways Nepali docs abstain or mis-rotate", "Needs tesseract-ocr-nep; untested"),
+        ("Mixed-script pages (English + Nepali) worst for OSD and text extraction",
          "Garbage text layer, wrong rotation", "No per-language quality signal"),
-        ("WARN tells you <i>something</i> happened, not whether text stayed legible",
-         "False confidence in bad output", "By design; needs human review step"),
+        ("WARN means <i>something</i> happened, not that text stayed legible",
+         "False confidence in bad output", "Human review step missing"),
     ]:
         rows.append([C(r[0]), C(r[1]), C(r[2])])
     story.append(Table(rows, colWidths=[62 * mm, 55 * mm, 58 * mm], style=TSTYLE))
 
-    story.append(Paragraph("3. Finding — why threshold tuning on real photos is slow", H1))
-    story.append(P("Guide values (area 10–97%, rectangularity ≥0.90, blur ≥100, tilt ≥0.5°, OSD ≥2.0) were "
-                   "measured on synthetic images: clean fonts, even light, solid backgrounds. Real photos break "
-                   "each assumption, and the thresholds interact:"))
+    story.append(Paragraph("4. What to improve (in priority order)", H1))
     for b in [
-        "Otsu assumes a two-hump brightness histogram — wood grain, shadow, glare, off-white tables make it "
-        "one-hump, so the 'paper shape' merges with the table or fractures.",
-        "Blur ≥100 shifts with camera shake, noise, and content (guide's own readings: sharp 1121, light blur "
-        "211, medium 32, heavy 3) — one number cannot serve all phones.",
-        "Rectangularity ≥0.90 rejects curled pages, folded corners, and reflective laminates — common for IDs.",
-        "Calibration is a multi-dimensional search: 100+ real photos, per-image metric logs, eyeballing every "
-        "rejection — weeks of labeled-data work, and thresholds rot as cameras and habits change.",
+        "<b>Keep PNG/lossless through to the PDF</b> (or JPEG q90+ and a 300-DPI cap option) — the single "
+        "biggest quality lever; transcoding every upload to q82 JPEG is today's main loss.",
+        "<b>Human review gate:</b> original-vs-processed comparison already exists on the run page — require "
+        "an explicit approve per image before the PDF is sealed.",
+        "<b>Retention + access control:</b> auto-purge raws/caches/logs after N days, presigned URLs with "
+        "expiry, access logging for ID documents.",
+        "<b>Per-image enhance decision:</b> skip CLAHE when the page is already even (measure before/after "
+        "sharpness); never bleach stamps by default.",
+        "<b>Real-photo calibration set:</b> 100+ labeled phone photos to re-check area/rectangularity/blur/OSD "
+        "gates — synthetic values drift on wood grain, glare, and curl.",
+        "<b>Multilingual OSD/OCR:</b> install and test tesseract-ocr-nep; add a per-script confidence readout.",
+        "<b>Never silently alter records:</b> always archive the untouched original next to the PDF.",
     ]:
         story.append(P("• " + b))
 
-    story.append(Paragraph("4. Recommendation — ask the user for a finished PDF", H1))
-    for b in [
-        "<b>Zero quality loss:</b> uploaded bytes are archived bytes — no DPI cap, re-encode, or CLAHE washout.",
-        "<b>Zero tuning burden:</b> layout and legibility are verified by a human eye at upload (preview + "
-        "'is this readable?' check beats any Laplacian threshold).",
-        "<b>Smaller blast radius:</b> one file instead of raw + cache + derivatives; retention/deletion trivial.",
-        "<b>Language-independent:</b> Devanagari, mixed-script, handwritten — all pass through untouched.",
-        "<b>No silent alteration:</b> what the applicant signed is what is stored.",
-    ]:
-        story.append(P("• " + b))
-    story.append(P("Suggested shape: PDF upload as the primary path — validate (page count, size, text layer, "
-                   "first-page thumbnail + blur check), keep photo→PDF only as an assisted fallback "
-                   "('no scanner? photograph each page; quality not guaranteed')."))
-
-    story.append(Paragraph("Appendix — measured stage timings (ms) and reference thresholds", H1))
-    rows = [[Paragraph("<b>stage</b>", CELLH), Paragraph("<b>ms range</b>", CELLH)]]
-    for s, t in STAGES:
-        rows.append([C(s), C(t)])
-    story.append(Table(rows, colWidths=[60 * mm, 60 * mm], style=TSTYLE))
-    story.append(Spacer(1, 2))
-    story.append(Paragraph("Thresholds: warp needs area 10–97% + rectangularity ≥0.90 + 2nd contour ≤40% "
-                           "(edge retry Canny 20/60 on failure); deskew at tilt ≥0.5°, limit 45°; OSD accepted "
-                           "at confidence ≥2.0; blur ≥100 on 1000px copy; compose longest side 2000px, JPEG q82.",
+    story.append(Paragraph("5. Recommendation — ask the user for a finished PDF", H1))
+    story.append(P("Server-side rebuilding is a lossy, threshold-heavy guess about someone else's document. "
+                   "A user-supplied PDF has zero quality loss, zero tuning burden, is language-independent, "
+                   "and what the applicant signed is what gets stored. Suggested shape: PDF upload as the "
+                   "primary path — validate (page count, size, text layer, first-page thumbnail + blur check) — "
+                   "and keep photo→PDF only as an assisted fallback ('no scanner? photograph each page; "
+                   "quality not guaranteed')."))
+    story.append(Paragraph("Appendix — reference thresholds", H1))
+    story.append(Paragraph("Warp needs area 10–97% + rectangularity ≥0.90 + 2nd contour ≤40% (edge retry Canny "
+                           "20/60 on failure); deskew at tilt ≥0.5°, limit 45°; OSD accepted at confidence ≥2.0 "
+                           "on a 1200px copy; blur ≥100 on 1000px copy; compose longest side 2000px, JPEG q82.",
                            SMALL))
     doc.build(story)
     print("wrote", OUT, OUT.stat().st_size, "bytes")
