@@ -162,15 +162,18 @@ def process_image(data: bytes, *, run_id="?", slot_label="", slot_group="", slot
         aligned, am = timed("align", stage_align, oriented)
         m.update({"skew_angle": am["skew_angle"], "deskew_deg": am["corrected_deg"],
                   "aligned": am["aligned"], "align_method": am["method"],
-                  "repad": am.get("repad", False)})
+                  "repad": am.get("repad", False),
+                  "residual_skew": am.get("residual_skew", 0.0)})
         if am["aligned"]:
-            emit("align", f"Tilt {am['skew_angle']}° found (≥ 0.3° threshold, limit 15°, "
+            emit("align", f"Original tilt {am['skew_angle']}° (≥ 0.3° threshold, limit 15°, "
                           f"{am['n_lines']} text lines via {am['method']}) → rotated "
-                          f"{am['corrected_deg']}° to fix, then re-squared border + uniform "
-                          f"2% padding", stage_ms["align"])
+                          f"{am['corrected_deg']}° to fix, border re-squared + uniform 2% padding · "
+                          f"processed tilt {am.get('residual_skew', 0.0)}°", stage_ms["align"])
         else:
-            emit("align", f"Level (tilt {am['skew_angle']}°, below 0.3° threshold) · "
-                          f"skipping ({am['method']})", stage_ms["align"])
+            emit("align", f"Level · original tilt {am['skew_angle']}°, processed tilt "
+                          f"{am.get('residual_skew', am['skew_angle'])}° "
+                          f"(below 0.3° threshold) · skipping ({am['method']})",
+                 stage_ms["align"])
         enhanced, em = timed("enhance", stage_enhance, aligned, enhance_enabled)
         if enhance_enabled:
             emit("enhance", "Contrast boost (CLAHE, no binarisation — stamps kept)",

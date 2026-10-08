@@ -102,10 +102,20 @@ def _trim_and_repad(pil_img, white_thresh=WHITE_THRESH, pad_ratio=PAD_RATIO):
     return ImageOps.expand(trimmed, border=pad, fill=(255, 255, 255)), True
 
 
+def _measure(pil_img, max_side=1000):
+    """Estimate skew of an image. Returns (skew, n_lines, method)."""
+    w, h = pil_img.size
+    scale = min(1.0, max_side / max(w, h))
+    small = pil_img.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+    return _estimate_skew_deg(np.array(small.convert("L")))
+
+
 def stage_align(pil_img, max_side=1000, min_angle=MIN_ANGLE, max_angle=MAX_ANGLE):
     """Counter-rotate small skew. Returns (pil_img, metrics).
 
-    metrics: {skew_angle, corrected_deg, aligned(bool), method, n_lines, repad}
+    metrics: {skew_angle (original tilt), corrected_deg, residual_skew
+    (processed tilt, re-measured on the output), aligned(bool), method,
+    n_lines, repad}
     Positive skew_angle = text lines slope down to the right in image
     coords; correction rotates by -skew (PIL CCW convention keeps lines level).
     When a correction is applied the canvas is re-squared (trim + uniform
@@ -117,7 +127,7 @@ def stage_align(pil_img, max_side=1000, min_angle=MIN_ANGLE, max_angle=MAX_ANGLE
     gray = np.array(small.convert("L"))
 
     skew, n_lines, method = _estimate_skew_deg(gray)
-    if method in ("hough_none", "hough_few") :
+    if method in ("hough_none", "hough_few"):
         # try contour-rect backup before giving up
         r_angle, r_method = _fallback_rect_angle(gray)
         if r_method == "rect" and min_angle <= abs(r_angle) <= max_angle:
@@ -127,13 +137,17 @@ def stage_align(pil_img, max_side=1000, min_angle=MIN_ANGLE, max_angle=MAX_ANGLE
 
     base = {"skew_angle": round(float(skew), 3), "n_lines": int(n_lines)}
     if abs(skew) < min_angle or abs(skew) > max_angle:
+        # untouched: processed tilt == original tilt
         return pil_img, {**base, "corrected_deg": 0.0, "aligned": False,
                          "method": method if skew == 0 else method + "_rejected",
-                         "repad": False}
+                         "residual_skew": round(float(skew), 3), "repad": False}
     # PIL rotate() is counter-clockwise; image y-axis points down so a line
     # sloping down-right (positive skew) needs a CCW (+skew) rotation to level.
     # Verified empirically: +7deg tilted doc -> skew ~= +7 -> rotate(+7) straightens.
     out = pil_img.rotate(skew, expand=True, fillcolor=(255, 255, 255))
     out, repad = _trim_and_repad(out)
+    # re-measure on the processed image: leftover tilt after the fix
+    residual, _, _ = _measure(out, max_side)
     return out, {**base, "corrected_deg": round(float(skew), 3),
-                 "aligned": True, "method": method, "repad": repad}
+                 "aligned": True, "method": method,
+                 "residual_skew": round(float(residual), 3), "repad": repad}

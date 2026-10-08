@@ -96,6 +96,9 @@ def test_align_corrects_tilt():
     out, m = stage_align(tilted)
     assert m["aligned"] is True, m
     assert abs(abs(m["skew_angle"]) - 7) < 1.0, m
+    # processed (residual) tilt must be smaller than the original tilt
+    assert abs(m["residual_skew"]) < abs(m["skew_angle"]), m
+    assert abs(m["residual_skew"]) < 1.0, m
     # residual after correction should be ~level
     _, m2 = stage_align(out)
     assert m2["aligned"] is False, m2
@@ -165,6 +168,11 @@ def test_process_image_logs_steps_with_thresholds():
     _, tm, _ = process_image(buf.getvalue(), slot_label="TILT", ocr_mode="OFF")
     tblob = "\n".join(e["msg"] for e in tm["steps"])
     assert "15°" in tblob and tm["aligned"] is True, tblob
+    # align step states original vs processed tilt
+    align_msgs = [e["msg"] for e in tm["steps"] if e["stage"] == "align"]
+    assert align_msgs and "Original tilt" in align_msgs[0]
+    assert "processed tilt" in align_msgs[0], align_msgs
+    assert "residual_skew" in tm, tm
 
 def test_detect_extracts_document_from_dark_bg():
     """Spec 5.2: photo of a page on a dark surface -> quad in 30-98%, warp path."""
